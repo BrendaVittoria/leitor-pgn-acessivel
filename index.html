@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101418">
+  <title>Leitor de PGN Acessível</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Leitor de PGN Acessível</h1>
+  </header>
+
+  <!-- Único anunciador do app (região aria-live central) -->
+  <div id="anunciador" aria-live="polite" class="sr-only"></div>
+
+  <main>
+    <!-- ======================= TELA INICIAL ======================= -->
+    <section id="tela-inicial" aria-labelledby="titulo-inicial">
+      <h2 id="titulo-inicial" class="sr-only">Início</h2>
+
+      <div class="acoes-linha">
+        <button type="button" id="btn-abrir-arquivo">Abrir arquivo</button>
+        <input type="file" id="arquivo-pgn" accept=".pgn,application/x-chess-pgn,application/vnd.chess-pgn,text/plain" class="sr-only" tabindex="-1" aria-hidden="true">
+        <button type="button" id="btn-colar-transferencia" hidden>Colar da área de transferência</button>
+        <button type="button" id="btn-colar-pgn" aria-expanded="false">Colar PGN</button>
+        <button type="button" id="btn-criar-pgn">Criar PGN</button>
+      </div>
+
+      <div id="area-colar" hidden>
+        <label for="campo-colar">Cole aqui o texto PGN</label>
+        <textarea id="campo-colar" rows="6" autocomplete="off" spellcheck="false"></textarea>
+        <div class="acoes-linha">
+          <button type="button" id="btn-carregar-colado">Carregar</button>
+        </div>
+        <p id="erro-colar" class="erro" role="alert" hidden></p>
+      </div>
+
+      <div id="area-continuar" hidden>
+        <button type="button" id="btn-continuar">Continuar última leitura</button>
+      </div>
+
+      <section id="area-guardados" aria-labelledby="titulo-guardados">
+        <h3 id="titulo-guardados">PGNs guardados</h3>
+        <p id="guardados-vazio" class="ajuda">Nenhum PGN guardado ainda. Os arquivos abertos ficam aqui para reabrir com um toque.</p>
+        <ol id="lista-guardados"></ol>
+        <button type="button" id="btn-apagar-todos" hidden>Apagar todos</button>
+      </section>
+    </section>
+
+    <!-- ======================= LISTA DE PARTIDAS ======================= -->
+    <section id="tela-lista" hidden aria-labelledby="titulo-lista">
+      <h2 id="titulo-lista">Escolha uma partida</h2>
+      <p id="lista-descricao"></p>
+      <ol id="lista-partidas"></ol>
+      <button type="button" id="btn-mais-partidas" hidden>Mostrar mais partidas</button>
+      <button type="button" id="btn-voltar-inicial">Voltar ao início</button>
+    </section>
+
+    <!-- ======================= TELA DE LEITURA ======================= -->
+    <section id="tela-leitura" hidden aria-labelledby="titulo-leitura">
+      <h2 id="titulo-leitura" class="sr-only">Leitura da partida</h2>
+
+      <!-- 1. Cabeçalho da partida -->
+      <div id="cabecalho-partida">
+        <p id="cabecalho-linha"></p>
+        <button type="button" id="btn-detalhes" aria-expanded="false">Detalhes da partida</button>
+        <dl id="detalhes-partida" hidden></dl>
+      </div>
+
+      <!-- 2. Barra de navegação de lances -->
+      <div id="barra-navegacao" role="group" aria-label="Navegação de lances">
+        <div class="acoes-linha">
+          <button type="button" id="btn-anterior">Lance anterior</button>
+          <button type="button" id="btn-proximo" class="botao-principal">Próximo lance</button>
+        </div>
+        <div class="acoes-linha">
+          <button type="button" id="btn-inicio">Início da partida</button>
+          <button type="button" id="btn-final">Final da partida</button>
+          <button type="button" id="btn-sair-variante" disabled>Sair da variante</button>
+          <button type="button" id="btn-voltar-principal" disabled>Voltar à linha principal</button>
+          <button type="button" id="btn-variantes" disabled>Variantes do lance</button>
+        </div>
+        <p id="indicador-posicao" aria-live="off">Início da partida</p>
+      </div>
+
+      <!-- 3. Tabuleiro opcional e entrada de lances: os dois modos de
+           entrada convivem — digitar ou tocar, o que for mais cômodo -->
+      <div class="acoes-linha">
+        <button type="button" id="btn-tabuleiro" aria-expanded="false">Mostrar tabuleiro</button>
+        <button type="button" id="btn-digitar" aria-expanded="false">Digitar lances</button>
+      </div>
+      <div id="area-entrada-lance" hidden>
+        <label for="entrada-lance">Jogar lance (digite ? para ajuda)</label>
+        <input type="text" id="entrada-lance" autocomplete="off" autocapitalize="off"
+               autocorrect="off" spellcheck="false" enterkeyhint="send">
+      </div>
+      <div id="area-tabuleiro" hidden></div>
+
+      <!-- 4. Lista de lances (árvore) -->
+      <button type="button" id="btn-ver-lances" aria-expanded="false">Ver lances</button>
+      <div id="area-lances" hidden>
+        <div id="arvore-lances"></div>
+      </div>
+
+      <!-- 5. Painel de ações -->
+      <button type="button" id="btn-acoes" aria-expanded="false">Ver ações</button>
+      <div id="painel-acoes" hidden>
+        <div class="acoes-grade">
+          <button type="button" id="btn-copiar-fen">Copiar FEN</button>
+          <button type="button" id="btn-colar-fen" aria-expanded="false">Colar FEN</button>
+          <button type="button" id="btn-descrever">Descrever posição</button>
+          <button type="button" id="btn-comentar" aria-expanded="false">Adicionar comentário</button>
+          <button type="button" id="btn-apagar-lance" disabled>Apagar lance</button>
+          <button type="button" id="btn-editar-cabecalho">Editar cabeçalho</button>
+          <button type="button" id="btn-salvar-pgn">Salvar novo PGN</button>
+          <button type="button" id="btn-restaurar" disabled>Restaurar original</button>
+          <button type="button" id="btn-trocar-partida" hidden>Trocar de partida</button>
+          <button type="button" id="btn-outro-pgn">Abrir outro PGN</button>
+        </div>
+        <label for="chk-perguntar" class="linha-checkbox">
+          <input type="checkbox" id="chk-perguntar" checked>
+          <span>Perguntar nas bifurcações</span>
+        </label>
+        <label for="chk-som" class="linha-checkbox">
+          <input type="checkbox" id="chk-som" checked>
+          <span>Som dos lances</span>
+        </label>
+
+        <div id="area-tema">
+          <label for="sel-tema">Cores das casas do tabuleiro</label>
+          <select id="sel-tema"></select>
+          <span class="amostra-tema" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          <p class="ajuda">Opções de alto contraste para baixa visão. Vale para este aparelho.</p>
+        </div>
+
+        <div id="area-colar-fen" hidden>
+          <label for="campo-fen">Cole aqui um FEN</label>
+          <input type="text" id="campo-fen" autocomplete="off" spellcheck="false">
+          <div class="acoes-linha">
+            <button type="button" id="btn-carregar-fen">Carregar</button>
+          </div>
+          <p id="erro-fen" class="erro" role="alert" hidden></p>
+        </div>
+
+        <div id="area-comentario" hidden>
+          <label for="campo-comentario">Comentário do lance atual</label>
+          <textarea id="campo-comentario" rows="3" autocomplete="off"></textarea>
+          <div class="acoes-linha">
+            <button type="button" id="btn-gravar-comentario">Gravar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ======================= DIÁLOGOS ======================= -->
+
+  <!-- Bifurcação: escolher a linha -->
+  <dialog id="dialogo-bifurcacao" aria-labelledby="titulo-bifurcacao">
+    <h2 id="titulo-bifurcacao">Escolha a linha</h2>
+    <div id="opcoes-bifurcacao"></div>
+    <button type="button" id="btn-cancelar-bifurcacao">Cancelar</button>
+  </dialog>
+
+  <!-- Descrever posição -->
+  <dialog id="dialogo-descrever" aria-labelledby="titulo-descrever">
+    <h2 id="titulo-descrever">Posição atual</h2>
+    <div id="blocos-descricao"></div>
+    <button type="button" id="btn-fechar-descrever">Fechar</button>
+  </dialog>
+
+  <!-- Salvar novo PGN: o que salvar -->
+  <dialog id="dialogo-salvar" aria-labelledby="titulo-salvar">
+    <h2 id="titulo-salvar">Salvar novo PGN</h2>
+    <div class="opcoes-coluna">
+      <button type="button" id="btn-salvar-inteira">Partida inteira, com variantes e comentários</button>
+      <button type="button" id="btn-salvar-linha">Só a linha atual, como linha principal</button>
+      <button type="button" id="btn-cancelar-salvar">Cancelar</button>
+    </div>
+    <div id="area-salvar-pronto" hidden>
+      <p id="salvar-pronto-texto"></p>
+      <div class="acoes-linha">
+        <button type="button" id="btn-baixar-salvo">Baixar</button>
+        <button type="button" id="btn-compartilhar-salvo" hidden>Compartilhar</button>
+        <button type="button" id="btn-fechar-salvar">Fechar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Criar PGN: nova ou a partir de FEN -->
+  <dialog id="dialogo-criar" aria-labelledby="titulo-criar">
+    <h2 id="titulo-criar">Criar PGN</h2>
+    <div class="opcoes-coluna">
+      <button type="button" id="btn-criar-nova">Partida nova</button>
+      <button type="button" id="btn-criar-fen-abrir" aria-expanded="false">A partir de um FEN</button>
+    </div>
+    <div id="area-criar-fen" hidden>
+      <label for="campo-criar-fen">Cole aqui o FEN inicial</label>
+      <input type="text" id="campo-criar-fen" autocomplete="off" spellcheck="false">
+      <div class="acoes-linha">
+        <button type="button" id="btn-criar-fen">Criar</button>
+      </div>
+      <p id="erro-criar-fen" class="erro" role="alert" hidden></p>
+    </div>
+    <button type="button" id="btn-cancelar-criar">Cancelar</button>
+  </dialog>
+
+  <!-- Promoção de peão (modo tabuleiro) -->
+  <dialog id="dialogo-promocao" aria-labelledby="titulo-promocao">
+    <h2 id="titulo-promocao">Promover peão a qual peça?</h2>
+    <div class="acoes-linha">
+      <button type="button" data-promocao="q">Dama</button>
+      <button type="button" data-promocao="r">Torre</button>
+      <button type="button" data-promocao="b">Bispo</button>
+      <button type="button" data-promocao="n">Cavalo</button>
+    </div>
+    <button type="button" id="btn-cancelar-promocao">Cancelar</button>
+  </dialog>
+
+  <!-- Desambiguação de lance digitado -->
+  <dialog id="dialogo-ambiguo" aria-labelledby="titulo-ambiguo">
+    <h2 id="titulo-ambiguo">Qual lance você quis dizer?</h2>
+    <div id="opcoes-ambiguo" class="opcoes-coluna"></div>
+    <button type="button" id="btn-cancelar-ambiguo">Cancelar</button>
+  </dialog>
+
+  <!-- Editar cabeçalho -->
+  <dialog id="dialogo-cabecalho" aria-labelledby="titulo-cabecalho">
+    <h2 id="titulo-cabecalho">Editar cabeçalho</h2>
+    <form id="form-cabecalho" method="dialog">
+      <label for="tag-white">Brancas</label>
+      <input type="text" id="tag-white" autocomplete="off">
+      <label for="tag-black">Pretas</label>
+      <input type="text" id="tag-black" autocomplete="off">
+      <label for="tag-event">Evento</label>
+      <input type="text" id="tag-event" autocomplete="off">
+      <label for="tag-site">Local</label>
+      <input type="text" id="tag-site" autocomplete="off">
+      <label for="tag-date">Data</label>
+      <input type="text" id="tag-date" autocomplete="off" placeholder="AAAA.MM.DD">
+      <label for="tag-round">Rodada</label>
+      <input type="text" id="tag-round" autocomplete="off">
+      <div class="acoes-linha">
+        <button type="submit" id="btn-gravar-cabecalho" value="gravar">Gravar</button>
+        <button type="button" id="btn-cancelar-cabecalho">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Confirmação (ações destrutivas: restaurar, apagar) -->
+  <dialog id="dialogo-confirmar" aria-labelledby="titulo-confirmar">
+    <h2 id="titulo-confirmar">Confirmar</h2>
+    <p id="confirmar-texto"></p>
+    <div class="acoes-linha">
+      <button type="button" id="btn-confirmar-sim">Confirmar</button>
+      <button type="button" id="btn-confirmar-nao">Cancelar</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,346 @@
+/* Leitor de PGN Acessível — tema escuro, alto contraste (herdado do relógio) */
+
+:root {
+  --fundo: #101418;
+  --fundo-painel: #1a2027;
+  --texto: #f2f5f7;
+  --texto-suave: #b8c2cc;
+  --destaque: #ffd75e;
+  --erro: #ff8f8f;
+  --borda: #3a4550;
+  --casa-clara: #b9c4ce;
+  --casa-escura: #5a6b7c;
+  --foco: #6ecbff;
+  --lance-de: #ffd75e;
+  --variante: #ff9d5c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  font-size: 1.125rem;
+  line-height: 1.5;
+}
+
+header { padding: 0.75rem 1rem 0; }
+h1 { font-size: 1.4rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.1rem; }
+
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+
+:focus-visible {
+  outline: 3px solid var(--foco);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+label { display: block; margin: 0.6rem 0 0.25rem; }
+.linha-checkbox,
+label.linha-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+input[type="text"],
+textarea {
+  width: 100%;
+  max-width: 32rem;
+  font-size: 1.05rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  background: var(--fundo-painel);
+  color: var(--texto);
+  font-family: inherit;
+}
+
+input[type="checkbox"] {
+  width: 1.35rem;
+  height: 1.35rem;
+  accent-color: var(--destaque);
+  flex: none;
+}
+
+button {
+  font-size: 1.05rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-painel);
+  color: var(--texto);
+  cursor: pointer;
+  margin: 0.3rem 0.3rem 0.3rem 0;
+  min-height: 44px;
+}
+button:hover { border-color: var(--foco); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* O "Próximo lance" é o botão mais usado do app: o maior alvo de toque. */
+.botao-principal {
+  background: var(--destaque);
+  color: #101418;
+  font-weight: 700;
+  border: none;
+  font-size: 1.3rem;
+  padding: 0.9rem 1.6rem;
+  flex: 1 1 12rem;
+  min-height: 56px;
+}
+
+#btn-abrir-arquivo,
+#btn-criar-pgn,
+#btn-continuar {
+  background: var(--destaque);
+  color: #101418;
+  font-weight: 700;
+  border: none;
+}
+
+.ajuda { color: var(--texto-suave); font-size: 0.95rem; margin: 0.25rem 0 0.5rem; }
+.erro { color: var(--erro); font-weight: 600; }
+
+.acoes-linha { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.opcoes-coluna { display: flex; flex-direction: column; gap: 0.4rem; align-items: stretch; }
+.opcoes-coluna button { margin: 0; text-align: left; }
+
+section { margin-top: 1.25rem; }
+
+/* ---------------- Tela inicial ---------------- */
+
+#area-colar textarea { max-width: 40rem; }
+
+#lista-guardados,
+#lista-partidas {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+
+#lista-guardados li,
+#lista-partidas li {
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+#lista-guardados li .guardado-abrir,
+#lista-partidas li button {
+  text-align: left;
+}
+
+#lista-guardados .guardado-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+/* ---------------- Tela de leitura ---------------- */
+
+#cabecalho-linha { font-weight: 600; margin: 0.5rem 0; }
+
+#detalhes-partida {
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  margin: 0.4rem 0;
+}
+#detalhes-partida div { display: flex; gap: 0.5rem; margin: 0.15rem 0; }
+#detalhes-partida dt { font-weight: 600; color: var(--texto-suave); min-width: 6rem; }
+#detalhes-partida dd { margin: 0; }
+
+#barra-navegacao {
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 0.6rem;
+  margin: 0.6rem 0;
+  background: var(--fundo-painel);
+}
+#barra-navegacao .acoes-linha { margin-bottom: 0.3rem; }
+#indicador-posicao {
+  margin: 0.3rem 0 0;
+  color: var(--texto-suave);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- Tabuleiro ---------------- */
+
+#area-tabuleiro { margin-top: 0.5rem; }
+
+.tab-grade {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  width: min(100%, 88vmin, 30rem);
+  border: 3px solid var(--borda);
+  box-sizing: border-box;
+}
+
+.tab-casa {
+  position: relative;
+  height: 0;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 0 0 100%;
+  line-height: 1;
+  min-height: 0;
+}
+.tab-casa.clara { background: var(--casa-clara); }
+.tab-casa.escura { background: var(--casa-escura); }
+.tab-casa img {
+  position: absolute;
+  inset: 6%;
+  width: 88%;
+  height: 88%;
+  pointer-events: none;
+  /* halo claro nas peças em temas de casas pretas (senão a peça preta some) */
+  filter: var(--halo-peca, none);
+}
+.tab-casa.selecionada {
+  box-shadow: inset 0 0 0 4px var(--cor-selecao, var(--destaque));
+}
+/* Destaque do último lance: anel sólido espesso + tinta de fundo, na cor de
+   seleção do tema escolhido (cada tema traz uma que contrasta com as casas). */
+.tab-casa.destaque-lance {
+  box-shadow: inset 0 0 0 5px var(--cor-selecao, var(--lance-de));
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--cor-selecao, var(--lance-de)) 35%, transparent),
+    color-mix(in srgb, var(--cor-selecao, var(--lance-de)) 35%, transparent)
+  );
+}
+/* Dentro de variante: distinto pelo PADRÃO (anel tracejado), não só pela
+   cor — quem enxerga sabe de relance que a posição não é a da principal. */
+.tab-casa.destaque-variante {
+  outline: 5px dashed var(--cor-selecao, var(--variante));
+  outline-offset: -5px;
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--cor-selecao, var(--variante)) 25%, transparent),
+    color-mix(in srgb, var(--cor-selecao, var(--variante)) 25%, transparent)
+  );
+}
+.tab-casa:focus-visible {
+  outline: 4px solid var(--foco);
+  outline-offset: -4px;
+  z-index: 1;
+}
+.tab-coordenadas {
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+
+/* ---------------- Árvore de lances ---------------- */
+
+#arvore-lances ol {
+  padding-left: 1.4rem;
+  margin: 0.2rem 0;
+}
+#arvore-lances .lance-btn {
+  display: inline;
+  margin: 0.1rem 0.2rem 0.1rem 0;
+  padding: 0.15rem 0.4rem;
+  font-size: 1rem;
+  min-height: 0;
+}
+#arvore-lances .lance-btn[aria-current="true"] {
+  background: var(--destaque);
+  color: #101418;
+  font-weight: 700;
+  border-color: var(--destaque);
+}
+#arvore-lances .variante-lista {
+  border-left: 2px solid var(--variante);
+  margin-left: 0.4rem;
+}
+#arvore-lances .comentario {
+  color: var(--texto-suave);
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
+/* Amostra das cores do tema escolhido (decorativa; segue as variáveis) */
+.amostra-tema {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 1.4rem);
+  border: 2px solid var(--borda);
+  vertical-align: middle;
+  margin-left: 0.6rem;
+}
+.amostra-tema span { width: 1.4rem; height: 1.4rem; }
+.amostra-tema span:nth-child(1),
+.amostra-tema span:nth-child(4) { background: var(--casa-clara); }
+.amostra-tema span:nth-child(2),
+.amostra-tema span:nth-child(3) { background: var(--casa-escura); }
+
+select {
+  font-size: 1.05rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  background: var(--fundo-painel);
+  color: var(--texto);
+  max-width: 24rem;
+}
+
+/* ---------------- Painel de ações ---------------- */
+
+#painel-acoes {
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-top: 0.5rem;
+  background: var(--fundo-painel);
+}
+.acoes-grade {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ---------------- Diálogos ---------------- */
+
+dialog {
+  background: var(--fundo-painel);
+  color: var(--texto);
+  border: 2px solid var(--borda);
+  border-radius: 10px;
+  max-width: 30rem;
+  width: calc(100% - 2rem);
+  padding: 1rem 1.25rem;
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+
+#opcoes-bifurcacao { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.6rem; }
+#opcoes-bifurcacao button { margin: 0; text-align: left; }
+#blocos-descricao p { margin: 0.4rem 0; }
+
+/* ---------------- Celular ---------------- */
+
+@media (max-width: 600px) {
+  body { font-size: 1.05rem; }
+  main { padding: 0 0.6rem 2rem; }
+  .tab-grade { width: min(100%, 92vmin); }
+  .botao-principal { font-size: 1.2rem; }
+}
