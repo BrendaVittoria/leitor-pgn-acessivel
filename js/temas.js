@@ -34,6 +34,22 @@ export const TEMAS_TABULEIRO = [
     selecao: '#ffd75e',
     haloPecas: false,
   },
+  {
+    id: 'amarelo-marrom',
+    nome: 'Amarelo e marrom escuro',
+    clara: '#ffdf33',
+    escura: '#5a3a1e',
+    selecao: '#2d7dff',
+    haloPecas: true, // peças pretas ganham contorno para não sumir no marrom escuro
+  },
+  {
+    id: 'branco-rosa',
+    nome: 'Branco e rosa',
+    clara: '#ffffff',
+    escura: '#e75480',
+    selecao: '#2d7dff',
+    haloPecas: false,
+  },
 ];
 
 export function obterTema(id) {
