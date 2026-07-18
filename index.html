@@ -178,6 +178,8 @@
   <dialog id="dialogo-salvar" aria-labelledby="titulo-salvar">
     <h2 id="titulo-salvar">Salvar novo PGN</h2>
     <div class="opcoes-coluna">
+      <label for="salvar-destino">Salvar em</label>
+      <select id="salvar-destino"></select>
       <button type="button" id="btn-salvar-inteira">Partida inteira, com variantes e comentários</button>
       <button type="button" id="btn-salvar-linha">Só a linha atual, como linha principal</button>
       <button type="button" id="btn-cancelar-salvar">Cancelar</button>
@@ -197,6 +199,8 @@
   <dialog id="dialogo-criar" aria-labelledby="titulo-criar">
     <h2 id="titulo-criar">Criar PGN</h2>
     <div class="opcoes-coluna">
+      <label for="criar-destino">Criar em</label>
+      <select id="criar-destino"></select>
       <button type="button" id="btn-criar-nova">Partida nova</button>
       <button type="button" id="btn-criar-fen-abrir" aria-expanded="false">A partir de um FEN</button>
     </div>

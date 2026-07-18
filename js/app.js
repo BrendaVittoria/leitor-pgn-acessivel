@@ -608,8 +608,53 @@ function editarCabecalhoDialogo() {
 
 let pgnParaSalvar = null;
 
+// Preenche o select de destino: novo arquivo ou acrescentar a um guardado.
+function popularSelectDestino(idSelect) {
+  const sel = $(idSelect);
+  sel.textContent = '';
+  const novo = document.createElement('option');
+  novo.value = '';
+  novo.textContent = 'Novo arquivo guardado';
+  sel.appendChild(novo);
+  const lista = store.lerGuardados().sort((a, b) => b.ultimoAcesso - a.ultimoAcesso);
+  for (const g of lista) {
+    const op = document.createElement('option');
+    op.value = g.id;
+    op.textContent = `Adicionar a: ${g.rotulo || g.jogadores || 'PGN guardado'}`;
+    sel.appendChild(op);
+  }
+}
+
+// Lê o destino escolhido num select preenchido acima; null = novo arquivo.
+function obterDestinoSelecionado(idSelect) {
+  const valor = $(idSelect).value;
+  return valor ? store.obterGuardado(valor) : null;
+}
+
+// Acrescenta uma partida (texto PGN) ao fim de um arquivo guardado.
+// Devolve mensagem de erro, ou null se deu certo.
+function acrescentarAoGuardado(destino, texto) {
+  const base = (destino.atual || destino.original).trim();
+  const novoAtual = `${base}\n\n${texto}`;
+  if (novoAtual.length > store.LIMITES.LIMITE_POR_ARQUIVO) {
+    return 'O arquivo escolhido ficaria grande demais. Salve como novo arquivo.';
+  }
+  if (arquivoAtual && arquivoAtual.guardadoId === destino.id) {
+    // Destino é o próprio arquivo aberto: acrescenta também na memória, senão
+    // o autossalvamento seguinte apagaria a partida recém-adicionada.
+    const { partidas } = lerPgn(texto);
+    arquivoAtual.partidas.push(...partidas);
+    $('btn-trocar-partida').hidden = arquivoAtual.partidas.length < 2;
+    store.atualizarGuardado(destino.id, { atual: textoAtualArquivo() });
+  } else {
+    store.atualizarGuardado(destino.id, { atual: novoAtual });
+  }
+  return null;
+}
+
 function abrirSalvar() {
   pgnParaSalvar = null;
+  popularSelectDestino('salvar-destino');
   $('area-salvar-pronto').hidden = true;
   $('dialogo-salvar').querySelector('.opcoes-coluna').hidden = false;
   $('dialogo-salvar').showModal();
@@ -629,21 +674,29 @@ function prepararSalvar(modo) {
     texto,
     nome: nomeArquivoPgn(arquivoAtual.rotulo),
   };
-  // Guarda como novo arquivo entre os guardados também.
-  store.guardarPgn({
-    original: texto,
-    atual: texto,
-    rotulo: `${arquivoAtual.rotulo} (salvo)`,
-    jogadores: arquivoAtual.rotulo,
-    resultado: partida.resultado,
-  });
+  const destino = obterDestinoSelecionado('salvar-destino');
+  let mensagem = 'PGN salvo. Baixe ou compartilhe o arquivo.';
+  if (destino) {
+    const erro = acrescentarAoGuardado(destino, texto);
+    if (erro) { anunciar(erro); return; }
+    mensagem = `Partida adicionada a: ${destino.rotulo}. Baixe ou compartilhe a partida salva.`;
+  } else {
+    // Guarda como novo arquivo entre os guardados.
+    store.guardarPgn({
+      original: texto,
+      atual: texto,
+      rotulo: `${arquivoAtual.rotulo} (salvo)`,
+      jogadores: arquivoAtual.rotulo,
+      resultado: partida.resultado,
+    });
+  }
   $('dialogo-salvar').querySelector('.opcoes-coluna').hidden = true;
   $('area-salvar-pronto').hidden = false;
-  $('salvar-pronto-texto').textContent = 'PGN salvo. Baixe ou compartilhe o arquivo.';
+  $('salvar-pronto-texto').textContent = mensagem;
   // Compartilhar só aparece se o navegador aceita algum dos formatos (.pgn ou .txt)
   $('btn-compartilhar-salvo').hidden = arquivoParaCompartilhar(texto, pgnParaSalvar.nome) === null;
   $('btn-copiar-salvo').hidden = !navigator.clipboard;
-  anunciar('PGN salvo.');
+  anunciar(destino ? 'Partida adicionada.' : 'PGN salvo.');
   atualizarGuardadosSeVisivel();
   $('btn-baixar-salvo').focus();
 }
@@ -651,6 +704,7 @@ function prepararSalvar(modo) {
 // ---------------- Criar PGN ----------------
 
 function abrirCriar() {
+  popularSelectDestino('criar-destino');
   $('area-criar-fen').hidden = true;
   $('btn-criar-fen-abrir').setAttribute('aria-expanded', 'false');
   $('erro-criar-fen').hidden = true;
@@ -663,15 +717,34 @@ function criarPartida(fen) {
     Event: '?', Site: '?', Date: dataHoje(), Round: '?',
     White: '?', Black: '?', Result: '*',
   };
-  let bloco;
   if (fen) {
     tags.SetUp = '1';
     tags.FEN = fen;
-    bloco = { tagsText: tagsParaTexto(tags), bodyText: '*' };
-  } else {
-    bloco = { tagsText: tagsParaTexto(tags), bodyText: '*' };
   }
-  const partida = montarPartida(bloco);
+  const partida = montarPartida({ tagsText: tagsParaTexto(tags), bodyText: '*' });
+  const destino = obterDestinoSelecionado('criar-destino');
+  if (destino) {
+    // Cria a partida dentro de um arquivo guardado existente e abre nela.
+    const base = (destino.atual || destino.original).trim();
+    const textoNovo = `${base}\n\n${gerarPgnCompleto(partida)}`;
+    if (textoNovo.length > store.LIMITES.LIMITE_POR_ARQUIVO) {
+      anunciar('O arquivo escolhido ficaria grande demais. Crie como novo arquivo.');
+      return;
+    }
+    const { partidas } = lerPgn(base);
+    partidas.push(partida);
+    arquivoAtual = {
+      guardadoId: destino.id,
+      original: textoNovo,
+      partidas,
+      rotulo: destino.rotulo,
+    };
+    store.atualizarGuardado(destino.id, { atual: textoNovo });
+    abrirPartida(partidas.length - 1);
+    revelarDigitacao();
+    anunciar(`Partida criada dentro de: ${destino.rotulo}. Jogue os lances.`);
+    return;
+  }
   arquivoAtual = {
     guardadoId: null,
     original: gerarPgnCompleto(partida),
@@ -943,6 +1016,16 @@ function renderGuardados() {
         }
       });
       acoes.appendChild(comp);
+    }
+    if (navigator.clipboard) {
+      acoes.appendChild(botao('Copiar', `Copiar: ${g.rotulo}`, async () => {
+        try {
+          await navigator.clipboard.writeText(g.atual || g.original);
+          anunciar('PGN copiado para a área de transferência.');
+        } catch {
+          anunciar('Não foi possível copiar. Use o botão Baixar.');
+        }
+      }));
     }
     acoes.appendChild(botao('Baixar', `Baixar: ${g.rotulo}`, () => {
       baixarPgn(g.atual || g.original, nomeArquivoPgn(g.rotulo));
