@@ -12,7 +12,7 @@ import {
 } from './pgnArvore.js';
 import {
   gerarPgnCompleto, gerarPgnLinha, nomeArquivoPgn, baixarPgn,
-  criarArquivoPgn, podeCompartilharArquivo, compartilharPgn,
+  arquivoParaCompartilhar, compartilharPgn,
 } from './pgnGerar.js';
 import { Leitura } from './leitura.js';
 import { TabuleiroAcessivel } from './tabuleiro.js';
@@ -640,8 +640,9 @@ function prepararSalvar(modo) {
   $('dialogo-salvar').querySelector('.opcoes-coluna').hidden = true;
   $('area-salvar-pronto').hidden = false;
   $('salvar-pronto-texto').textContent = 'PGN salvo. Baixe ou compartilhe o arquivo.';
-  const arquivo = criarArquivoPgn(texto, pgnParaSalvar.nome);
-  $('btn-compartilhar-salvo').hidden = !podeCompartilharArquivo(arquivo);
+  // Compartilhar só aparece se o navegador aceita algum dos formatos (.pgn ou .txt)
+  $('btn-compartilhar-salvo').hidden = arquivoParaCompartilhar(texto, pgnParaSalvar.nome) === null;
+  $('btn-copiar-salvo').hidden = !navigator.clipboard;
   anunciar('PGN salvo.');
   atualizarGuardadosSeVisivel();
   $('btn-baixar-salvo').focus();
@@ -934,10 +935,12 @@ function renderGuardados() {
 
     const acoes = document.createElement('div');
     acoes.className = 'guardado-acoes';
-    const arquivo = criarArquivoPgn(g.atual || g.original, nomeArquivoPgn(g.rotulo));
-    if (podeCompartilharArquivo(arquivo)) {
+    const arquivo = arquivoParaCompartilhar(g.atual || g.original, nomeArquivoPgn(g.rotulo));
+    if (arquivo) {
       const comp = botao('Compartilhar', `Compartilhar: ${g.rotulo}`, async () => {
-        try { await compartilharPgn(arquivo, g.rotulo); } catch { /* cancelado */ }
+        try { await compartilharPgn(arquivo, g.rotulo); } catch (e) {
+          if (e && e.name !== 'AbortError') anunciar('Não foi possível compartilhar. Use o botão Baixar.');
+        }
       });
       acoes.appendChild(comp);
     }
@@ -1213,8 +1216,20 @@ function ligarEventos() {
   });
   $('btn-compartilhar-salvo').addEventListener('click', async () => {
     if (!pgnParaSalvar) return;
-    const arquivo = criarArquivoPgn(pgnParaSalvar.texto, pgnParaSalvar.nome);
-    try { await compartilharPgn(arquivo, arquivoAtual.rotulo); } catch { /* cancelado */ }
+    const arquivo = arquivoParaCompartilhar(pgnParaSalvar.texto, pgnParaSalvar.nome);
+    if (!arquivo) return;
+    try { await compartilharPgn(arquivo, arquivoAtual.rotulo); } catch (e) {
+      if (e && e.name !== 'AbortError') anunciar('Não foi possível compartilhar. Use o botão Copiar PGN ou Baixar.');
+    }
+  });
+  $('btn-copiar-salvo').addEventListener('click', async () => {
+    if (!pgnParaSalvar) return;
+    try {
+      await navigator.clipboard.writeText(pgnParaSalvar.texto);
+      anunciar('PGN copiado para a área de transferência.');
+    } catch {
+      anunciar('Não foi possível copiar. Use o botão Baixar.');
+    }
   });
 
   // Diálogos: criar

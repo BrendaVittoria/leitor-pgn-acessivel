@@ -42,6 +42,7 @@
           "name": "pgn",
           "accept": [
             ".pgn",
+            ".txt",
             "application/x-chess-pgn",
             "application/vnd.chess-pgn",
             "text/plain"
@@ -56,7 +57,7 @@
       "accept": {
         "application/x-chess-pgn": [".pgn"],
         "application/vnd.chess-pgn": [".pgn"],
-        "text/plain": [".pgn"]
+        "text/plain": [".pgn", ".txt"]
       }
     }
   ]

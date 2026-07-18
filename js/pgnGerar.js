@@ -189,14 +189,20 @@ export function baixarPgn(textoPgn, nomeArquivo) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-export function criarArquivoPgn(textoPgn, nomeArquivo) {
-  return new File([textoPgn], nomeArquivo, { type: 'application/x-chess-pgn' });
-}
-
-export function podeCompartilharArquivo(arquivo) {
-  return Boolean(
-    navigator.share && navigator.canShare && navigator.canShare({ files: [arquivo] }),
-  );
+// Devolve o arquivo que o navegador aceita compartilhar, ou null se nenhum.
+// Nos navegadores com motor Chromium (Chrome, Edge, Samsung Internet) o share()
+// só aceita extensões de uma lista fixa que não inclui .pgn — e o canShare()
+// mente, aceitando o .pgn que o share() depois rejeita. Como o share() consome
+// o gesto do usuário, não dá para tentar .pgn e cair para .txt na falha; então
+// no Chromium vai .txt direto, com ".pgn" no meio do nome para o destinatário
+// saber o que é. Safari (iPhone/Mac) aceita .pgn de verdade e o recebe intacto.
+export function arquivoParaCompartilhar(textoPgn, nomeArquivo) {
+  if (!navigator.share || !navigator.canShare) return null;
+  const ehChromium = /Chrom(e|ium)\//.test(navigator.userAgent);
+  const arquivo = ehChromium
+    ? new File([textoPgn], `${nomeArquivo}.txt`, { type: 'text/plain' })
+    : new File([textoPgn], nomeArquivo, { type: 'application/x-chess-pgn' });
+  return navigator.canShare({ files: [arquivo] }) ? arquivo : null;
 }
 
 export async function compartilharPgn(arquivo, titulo) {
