@@ -129,6 +129,12 @@ section { margin-top: 1.25rem; }
 
 #area-colar textarea { max-width: 40rem; }
 
+/* Dica de atalho: só faz sentido onde há teclado. No celular seria mais uma
+   linha para o leitor de tela atravessar sem proveito nenhum. */
+@media (pointer: coarse) {
+  .dica-teclado { display: none; }
+}
+
 #lista-guardados,
 #lista-partidas {
   list-style: none;

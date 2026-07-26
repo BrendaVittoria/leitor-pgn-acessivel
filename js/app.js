@@ -1055,14 +1055,61 @@ async function colarDaAreaDeTransferencia() {
     anunciar('A área de transferência está vazia. Copie um PGN ou um FEN primeiro.');
     return;
   }
-  // FEN: o que sobra depois de normalizar valida como FEN. Um PGN inteiro
-  // nunca passa por aqui — vira uma linha só com campos demais.
+  abrirTextoOuFen(texto);
+}
+
+// Decide sozinho entre FEN e PGN: o que sobra depois de normalizar valida
+// como FEN, abre como posição avulsa. Um PGN inteiro nunca passa por aí —
+// vira uma linha só, com campos demais. Devolve 'fen', 'pgn' ou null.
+function abrirTextoOuFen(texto) {
   const fen = normalizarFen(texto);
   if (fen && validateFen(fen).ok) {
     abrirFenAvulso(fen);
+    return 'fen';
+  }
+  // O erro específico já é anunciado lá dentro quando não é PGN.
+  return abrirTextoPgn(texto) ? 'pgn' : null;
+}
+
+// ---------------- Colar na página (Control mais V) ----------------
+
+// Quinta porta de entrada: com o arquivo .pgn copiado no gerenciador de
+// arquivos, um Control mais V na tela inicial já abre — o navegador entrega o
+// conteúdo junto com o evento, sem pedir permissão nem abrir seletor. Texto
+// colado solto também vale. Só na tela inicial: no meio de uma leitura, um
+// atalho desses trocaria a partida aberta sem querer.
+async function aoColarNaPagina(evento) {
+  if (!$('tela-inicial') || $('tela-inicial').hidden) return;
+  const alvo = evento.target;
+  // Dentro de uma caixa de texto o Control mais V é dela, não nosso.
+  if (alvo && alvo.matches && alvo.matches('input, textarea, [contenteditable]')) return;
+  const dados = evento.clipboardData;
+  if (!dados) return;
+
+  const arquivo = dados.files && dados.files[0];
+  if (arquivo) {
+    evento.preventDefault();
+    if (arquivo.size > store.LIMITES.LIMITE_POR_ARQUIVO) {
+      anunciar(`O arquivo ${arquivo.name} é grande demais para este app.`);
+      return;
+    }
+    let texto = '';
+    try {
+      texto = await lerTextoArquivo(arquivo);
+    } catch {
+      anunciar(`Não consegui ler o arquivo ${arquivo.name}.`);
+      return;
+    }
+    if (!abrirTextoOuFen(texto)) {
+      anunciar(`Não encontrei nenhuma partida válida em ${arquivo.name}.`);
+    }
     return;
   }
-  abrirTextoPgn(texto); // erro específico já é anunciado quando não é PGN
+
+  const texto = (dados.getData('text') || '').trim();
+  if (!texto) return;
+  evento.preventDefault();
+  abrirTextoOuFen(texto);
 }
 
 // ---------------- PGNs guardados (tela inicial) ----------------
@@ -1251,6 +1298,7 @@ function ligarEventos() {
     abrirTextoPgn(texto);
   });
   $('btn-colar-transferencia').addEventListener('click', colarDaAreaDeTransferencia);
+  document.addEventListener('paste', aoColarNaPagina);
   $('btn-colar-pgn').addEventListener('click', () => {
     const abrir = $('area-colar').hidden;
     $('area-colar').hidden = !abrir;

@@ -17,7 +17,7 @@ python -m http.server 8100
 # abra http://localhost:8100
 ```
 
-### Quatro portas para abrir um PGN
+### Cinco portas para abrir um PGN
 
 1. **Compartilhar com o app** (Web Share Target) — no Android, com o PWA
    instalado, compartilhe um `.pgn` (ou o texto do PGN) e escolha o app.
@@ -25,6 +25,9 @@ python -m http.server 8100
 3. **Abrir arquivo** — seletor de arquivos (funciona em todo lugar).
 4. **Colar PGN ou FEN** — caixa de texto que aceita o PGN copiado ou um FEN
    solto (aí abre como posição avulsa, para explorar ou jogar dali).
+5. **Control mais V na tela inicial** — abre o arquivo `.pgn` copiado no
+   gerenciador de arquivos, ou o texto (PGN ou FEN) que estiver na área de
+   transferência. Dentro das caixas de texto o atalho continua sendo delas.
 
 Também dá para **Criar PGN** (partida nova ou a partir de um FEN) e jogar
 lances por digitação ou pelo tabuleiro.
