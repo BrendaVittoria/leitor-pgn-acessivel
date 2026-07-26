@@ -27,12 +27,12 @@
         <button type="button" id="btn-abrir-arquivo">Abrir arquivo</button>
         <input type="file" id="arquivo-pgn" accept=".pgn,.txt,application/x-chess-pgn,application/vnd.chess-pgn,text/plain" class="sr-only" tabindex="-1" aria-hidden="true">
         <button type="button" id="btn-colar-transferencia" hidden>Colar da área de transferência</button>
-        <button type="button" id="btn-colar-pgn" aria-expanded="false">Colar PGN</button>
+        <button type="button" id="btn-colar-pgn" aria-expanded="false">Colar PGN ou FEN</button>
         <button type="button" id="btn-criar-pgn">Criar PGN</button>
       </div>
 
       <div id="area-colar" hidden>
-        <label for="campo-colar">Cole aqui o texto PGN</label>
+        <label for="campo-colar">Cole aqui um PGN ou um FEN</label>
         <textarea id="campo-colar" rows="6" autocomplete="off" spellcheck="false"></textarea>
         <div class="acoes-linha">
           <button type="button" id="btn-carregar-colado">Carregar</button>
@@ -100,6 +100,20 @@
                autocorrect="off" spellcheck="false" enterkeyhint="send">
       </div>
       <div id="area-tabuleiro" hidden></div>
+      <!-- Voltar e avançar colados no tabuleiro: com ele à vista, ninguém
+           precisa subir até a barra de navegação para andar nos lances -->
+      <div id="nav-tabuleiro" role="group" aria-label="Lances, junto ao tabuleiro" hidden>
+        <button type="button" id="btn-tab-anterior" aria-label="Lance anterior" title="Lance anterior">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <polygon points="17,3 17,21 4,12"></polygon>
+          </svg>
+        </button>
+        <button type="button" id="btn-tab-proximo" class="botao-principal" aria-label="Próximo lance" title="Próximo lance">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <polygon points="7,3 7,21 20,12"></polygon>
+          </svg>
+        </button>
+      </div>
 
       <!-- 4. Lista de lances (árvore) -->
       <button type="button" id="btn-ver-lances" aria-expanded="false">Ver lances</button>

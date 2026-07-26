@@ -244,6 +244,29 @@ section { margin-top: 1.25rem; }
   outline-offset: -4px;
   z-index: 1;
 }
+/* Voltar/avançar logo abaixo do tabuleiro, com a mesma largura dele: dois
+   alvos enormes, sem texto, para quem está olhando as peças. */
+#nav-tabuleiro {
+  display: flex;
+  gap: 0.5rem;
+  width: min(100%, 88vmin, 30rem);
+  margin: 0.5rem 0 0.25rem;
+}
+#nav-tabuleiro button {
+  flex: 1;
+  margin: 0;
+  min-height: 60px;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#nav-tabuleiro svg {
+  width: 2rem;
+  height: 2rem;
+  fill: currentColor;
+}
+
 .tab-coordenadas {
   color: var(--texto-suave);
   font-size: 0.9rem;
@@ -342,5 +365,6 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
   body { font-size: 1.05rem; }
   main { padding: 0 0.6rem 2rem; }
   .tab-grade { width: min(100%, 92vmin); }
+  #nav-tabuleiro { width: min(100%, 92vmin); }
   .botao-principal { font-size: 1.2rem; }
 }

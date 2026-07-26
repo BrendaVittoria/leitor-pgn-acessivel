@@ -243,6 +243,8 @@ function render() {
   const semLances = partida.raiz.children.length === 0;
   $('btn-anterior').disabled = semLances;
   $('btn-proximo').disabled = semLances;
+  $('btn-tab-anterior').disabled = semLances;
+  $('btn-tab-proximo').disabled = semLances;
   $('btn-inicio').disabled = semLances;
   $('btn-final').disabled = semLances;
   $('btn-sair-variante').disabled = !est.podeSairVariante;
@@ -430,6 +432,9 @@ function configurarTabuleiro() {
 function aplicarPrefTabuleiro() {
   const mostrar = prefs.tabuleiro;
   $('area-tabuleiro').hidden = !mostrar;
+  // Os botões de seta só existem enquanto o tabuleiro está à vista; sem ele
+  // seriam um par de alvos duplicados no caminho do leitor de tela.
+  $('nav-tabuleiro').hidden = !mostrar;
   $('btn-tabuleiro').setAttribute('aria-expanded', String(mostrar));
   $('btn-tabuleiro').textContent = mostrar ? 'Ocultar tabuleiro' : 'Mostrar tabuleiro';
   if (mostrar && leitura) {
@@ -919,6 +924,68 @@ function aplicarCorrecao(san) {
 
 // ---------------- Colar FEN (posição avulsa) ----------------
 
+// Aceita o FEN do jeito que ele chega do mundo real: espaços estranhos
+// (inclusive o espaço fixo que alguns teclados de celular colam), quebras de
+// linha, aspas em volta, rótulo "FEN:" na frente, a tag PGN inteira
+// [FEN "..."] e as formas curtas de 4 ou 5 campos (sem os contadores).
+// Devolve string vazia quando não sobra nada aproveitável.
+function normalizarFen(texto) {
+  let t = String(texto || '').replace(/[\s\u00a0\u2000-\u200b\ufeff]+/g, ' ').trim();
+  // Só a tag sozinha vira FEN: num PGN inteiro ela vem acompanhada de lances,
+  // que não podem ser jogados fora.
+  const tag = t.match(/^\[\s*FEN\s+"([^"]+)"\s*\]$/i);
+  if (tag) t = tag[1];
+  t = t.replace(/^fen\b\s*[:=]?\s*/i, '');
+  t = t.replace(/^["'“”]+/, '').replace(/["'“”]+$/, '');
+  t = t.replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  const campos = t.split(' ');
+  // Formas curtas: completa os contadores que faltam, como fazem os sites.
+  // Só quando o primeiro campo é mesmo um tabuleiro — assim um texto qualquer
+  // de quatro palavras não vira "FEN" e não recebe um erro sem sentido.
+  if (pareceTabuleiro(campos[0])) {
+    if (campos.length === 4) campos.push('0', '1');
+    else if (campos.length === 5) campos.push('1');
+  }
+  return campos.join(' ');
+}
+
+function pareceTabuleiro(campo) {
+  return /^[pnbrqk1-8]+(\/[pnbrqk1-8]+){7}$/i.test(campo || '');
+}
+
+// Traduz o motivo da recusa do chess.js — a mensagem vai para o leitor de
+// tela, então precisa fazer sentido em português.
+const MOTIVOS_FEN = [
+  [/six space-delimited fields/, 'faltam campos. Um FEN tem posição, vez de jogar, roques, en passant e os dois contadores'],
+  [/move number/, 'o número do lance precisa ser um inteiro maior que zero'],
+  [/half move/, 'o contador de lances sem captura precisa ser um número inteiro'],
+  [/en-passant/, 'a casa de en passant não confere com a vez de jogar'],
+  [/castling availability/, 'os roques só aceitam as letras K, Q, k, q ou um traço'],
+  [/side-to-move/, 'falta dizer de quem é a vez: w para as brancas ou b para as pretas'],
+  [/8 '\/'-delimited rows/, 'a posição precisa ter 8 fileiras separadas por barra'],
+  [/consecutive number/, 'há dois números seguidos numa fileira'],
+  [/invalid piece/, 'há uma letra de peça que não existe'],
+  [/too many squares in rank/, 'alguma fileira não soma 8 casas'],
+  [/missing white king/, 'falta o rei branco'],
+  [/missing black king/, 'falta o rei preto'],
+  [/too many white kings/, 'há mais de um rei branco'],
+  [/too many black kings/, 'há mais de um rei preto'],
+  [/pawns are on the edge rows/, 'há peão na primeira ou na oitava fileira'],
+];
+
+function motivoFenInvalido(erro, fen) {
+  // Nem parece um FEN: dizer isso vale mais que traduzir o erro técnico.
+  // (Com as 8 fileiras no lugar, o erro do chess.js é mais específico e útil.)
+  if (fen && fen.split(' ')[0].split('/').length !== 8) {
+    return 'isto não parece um FEN. Ele começa com as 8 fileiras separadas por barra';
+  }
+  for (const [padrao, texto] of MOTIVOS_FEN) {
+    if (padrao.test(erro || '')) return texto;
+  }
+  return 'formato não reconhecido';
+}
+
 // Abre um FEN válido como posição avulsa (usado pelo Colar FEN e pelo botão
 // de colar da área de transferência).
 function abrirFenAvulso(fen) {
@@ -943,16 +1010,24 @@ function abrirFenAvulso(fen) {
 }
 
 function carregarFen() {
-  const fen = $('campo-fen').value.trim();
+  const fen = normalizarFen($('campo-fen').value);
   const erro = $('erro-fen');
+  if (!fen) {
+    erro.textContent = 'Cole um FEN primeiro.';
+    erro.hidden = false;
+    anunciar('Cole um FEN primeiro.');
+    return;
+  }
   const v = validateFen(fen);
   if (!v.ok) {
-    erro.textContent = `FEN inválido: ${v.error || 'formato não reconhecido'}.`;
+    const motivo = motivoFenInvalido(v.error, fen);
+    erro.textContent = `FEN inválido: ${motivo}.`;
     erro.hidden = false;
     anunciar('FEN inválido.');
     return;
   }
   erro.hidden = true;
+  $('campo-fen').value = '';
   abrirFenAvulso(fen);
 }
 
@@ -961,7 +1036,7 @@ function carregarFen() {
 // Um botão só, que lê a área de transferência e decide sozinho: FEN válido
 // abre como posição avulsa; senão, tenta como PGN. Onde a API não existe
 // (navegador antigo, contexto inseguro), o botão fica escondido e a caixa
-// "Colar PGN" continua como rede de segurança universal.
+// "Colar PGN ou FEN" continua como rede de segurança universal.
 function temLeituraDeClipboard() {
   return Boolean(navigator.clipboard && navigator.clipboard.readText);
 }
@@ -972,7 +1047,7 @@ async function colarDaAreaDeTransferencia() {
     texto = await navigator.clipboard.readText();
   } catch {
     // Permissão negada ou leitura bloqueada: erro específico + fallback.
-    anunciar('Não consegui ler a área de transferência. Cole o texto na caixa Colar PGN.');
+    anunciar('Não consegui ler a área de transferência. Cole o texto na caixa Colar PGN ou FEN.');
     return;
   }
   texto = (texto || '').trim();
@@ -980,9 +1055,11 @@ async function colarDaAreaDeTransferencia() {
     anunciar('A área de transferência está vazia. Copie um PGN ou um FEN primeiro.');
     return;
   }
-  // FEN: texto de uma linha só que valida como FEN.
-  if (!texto.includes('\n') && validateFen(texto).ok) {
-    abrirFenAvulso(texto);
+  // FEN: o que sobra depois de normalizar valida como FEN. Um PGN inteiro
+  // nunca passa por aqui — vira uma linha só com campos demais.
+  const fen = normalizarFen(texto);
+  if (fen && validateFen(fen).ok) {
+    abrirFenAvulso(fen);
     return;
   }
   abrirTextoPgn(texto); // erro específico já é anunciado quando não é PGN
@@ -1182,10 +1259,22 @@ function ligarEventos() {
   });
   $('btn-carregar-colado').addEventListener('click', () => {
     const texto = $('campo-colar').value;
-    if (!texto.trim()) { mostrarErroColar('Cole um texto PGN primeiro.'); return; }
+    if (!texto.trim()) { mostrarErroColar('Cole um PGN ou um FEN primeiro.'); return; }
+    // A caixa aceita as duas coisas: quem só tem a posição cola o FEN aqui
+    // mesmo, sem precisar abrir uma partida antes.
+    const fen = normalizarFen(texto);
+    if (fen && validateFen(fen).ok) {
+      $('erro-colar').hidden = true;
+      $('campo-colar').value = '';
+      abrirFenAvulso(fen);
+      return;
+    }
     const ok = abrirTextoPgn(texto);
-    if (!ok) mostrarErroColar('Não encontrei nenhuma partida válida neste conteúdo.');
-    else $('campo-colar').value = '';
+    if (!ok) {
+      mostrarErroColar(fen && pareceTabuleiro(fen.split(' ')[0])
+        ? `FEN inválido: ${motivoFenInvalido(validateFen(fen).error, fen)}.`
+        : 'Não encontrei nenhum PGN nem FEN válido neste conteúdo.');
+    } else $('campo-colar').value = '';
   });
   $('btn-criar-pgn').addEventListener('click', abrirCriar);
   $('btn-continuar').addEventListener('click', continuarUltima);
@@ -1207,6 +1296,8 @@ function ligarEventos() {
   // Navegação de lances
   $('btn-anterior').addEventListener('click', () => leitura.anterior());
   $('btn-proximo').addEventListener('click', () => { acordarAudio(); leitura.proximo(); });
+  $('btn-tab-anterior').addEventListener('click', () => leitura.anterior());
+  $('btn-tab-proximo').addEventListener('click', () => { acordarAudio(); leitura.proximo(); });
   $('btn-inicio').addEventListener('click', () => leitura.inicio());
   $('btn-final').addEventListener('click', () => leitura.fim());
   $('btn-sair-variante').addEventListener('click', () => leitura.sairVariante());
@@ -1325,13 +1416,16 @@ function ligarEventos() {
     if (abrir) $('campo-criar-fen').focus();
   });
   $('btn-criar-fen').addEventListener('click', () => {
-    const fen = $('campo-criar-fen').value.trim();
-    const v = validateFen(fen);
+    const fen = normalizarFen($('campo-criar-fen').value);
+    const v = fen ? validateFen(fen) : { ok: false };
     if (!v.ok) {
-      $('erro-criar-fen').textContent = `FEN inválido: ${v.error || 'formato não reconhecido'}.`;
+      $('erro-criar-fen').textContent = fen
+        ? `FEN inválido: ${motivoFenInvalido(v.error, fen)}.`
+        : 'Cole um FEN primeiro.';
       $('erro-criar-fen').hidden = false;
       return;
     }
+    $('campo-criar-fen').value = '';
     $('dialogo-criar').close();
     criarPartida(fen);
   });

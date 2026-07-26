@@ -23,7 +23,8 @@ python -m http.server 8100
    instalado, compartilhe um `.pgn` (ou o texto do PGN) e escolha o app.
 2. **"Abrir com"** (File Handling API) — tocar num `.pgn` oferece o app.
 3. **Abrir arquivo** — seletor de arquivos (funciona em todo lugar).
-4. **Colar PGN** — caixa de texto para colar o PGN copiado.
+4. **Colar PGN ou FEN** — caixa de texto que aceita o PGN copiado ou um FEN
+   solto (aí abre como posição avulsa, para explorar ou jogar dali).
 
 Também dá para **Criar PGN** (partida nova ou a partir de um FEN) e jogar
 lances por digitação ou pelo tabuleiro.
