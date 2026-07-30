@@ -45,7 +45,8 @@
             ".txt",
             "application/x-chess-pgn",
             "application/vnd.chess-pgn",
-            "text/plain"
+            "text/plain",
+            "application/octet-stream"
           ]
         }
       ]

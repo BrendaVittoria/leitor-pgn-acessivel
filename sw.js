@@ -2,8 +2,9 @@
 // handler do POST do share target (o ponto mais delicado do projeto).
 // Estratégia de shell: stale-while-revalidate, como no relógio.
 
-const CACHE = 'leitor-pgn-v6';
+const CACHE = 'leitor-pgn-v7';
 const CACHE_COMPARTILHADO = 'leitor-pgn-share';
+const LIMITE_COMPARTILHADO = 5 * 1024 * 1024;
 
 const ARQUIVOS = [
   './',
@@ -99,22 +100,43 @@ self.addEventListener('fetch', (evento) => {
 // busca o conteúdo em ./__shared_pgn.
 async function tratarCompartilhamento(requisicao) {
   let texto = '';
+  let recusado = false;
   try {
     const form = await requisicao.formData();
     const arquivo = form.get('pgn');
-    if (arquivo && typeof arquivo.text === 'function' && arquivo.size) {
-      texto = await arquivo.text();
+    if (arquivo && typeof arquivo.arrayBuffer === 'function' && arquivo.size) {
+      texto = await lerArquivoCompartilhado(arquivo);
+      recusado = texto === null;
     } else {
       texto = form.get('text') || form.get('url') || '';
     }
   } catch {
     texto = '';
   }
+  if (recusado) return Response.redirect('./?compartilhado=erro', 303);
   const cache = await caches.open(CACHE_COMPARTILHADO);
   await cache.put('./__shared_pgn', new Response(texto, {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   }));
   return Response.redirect('./?compartilhado=1', 303);
+}
+
+// O manifest aceita a etiqueta genérica de "arquivo qualquer" (é a que o
+// WhatsApp põe num .pgn, por não conhecer a extensão), então qualquer binário
+// pode cair aqui. Recusa o que claramente não é texto, em vez de despejar
+// lixo no leitor de tela. Devolve null quando recusa.
+async function lerArquivoCompartilhado(arquivo) {
+  if (arquivo.size > LIMITE_COMPARTILHADO) return null;
+  const buf = await arquivo.arrayBuffer();
+  const inicio = new Uint8Array(buf, 0, Math.min(buf.byteLength, 1024));
+  if (inicio.includes(0)) return null; // byte nulo só existe em binário
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf);
+  } catch {
+    // Mesmo fallback do seletor de arquivos: PGN de programa antigo de
+    // Windows vem em windows-1252, com acento nos nomes dos jogadores.
+    return new TextDecoder('windows-1252').decode(buf);
+  }
 }
 
 async function entregarCompartilhado() {

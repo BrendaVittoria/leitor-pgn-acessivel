@@ -1565,6 +1565,13 @@ function irParaInicio() {
 async function verificarCompartilhamento() {
   const params = new URLSearchParams(location.search);
   if (!params.has('compartilhado')) return false;
+  // O service worker recusou o arquivo (binário ou grande demais): avisa, em
+  // vez de voltar à tela inicial em silêncio.
+  if (params.get('compartilhado') === 'erro') {
+    history.replaceState(null, '', './');
+    anunciar('O arquivo compartilhado não é um texto PGN.');
+    return false;
+  }
   try {
     const resp = await fetch('./__shared_pgn');
     if (resp && resp.ok) {
