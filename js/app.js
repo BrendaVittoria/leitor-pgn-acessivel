@@ -1406,6 +1406,7 @@ function ligarEventos() {
     mostrarListaPartidas(`Arquivo com ${arquivoAtual.partidas.length} partidas. Escolha uma da lista.`);
   });
   $('btn-outro-pgn').addEventListener('click', irParaInicio);
+  $('btn-voltar-inicial-leitura').addEventListener('click', irParaInicio);
 
   $('chk-perguntar').addEventListener('change', (e) => {
     prefs.perguntarBifurcacoes = e.target.checked;
@@ -1558,6 +1559,11 @@ function irParaInicio() {
   leitura = null;
   renderGuardados();
   configurarContinuar();
+  // O botão apertado some junto com a tela: sem levar o foco para o primeiro
+  // botão da tela inicial, o leitor de tela fica sem foco nenhum e parece que
+  // o toque não fez nada.
+  $('btn-abrir-arquivo').focus();
+  anunciar('Tela inicial.');
 }
 
 // ---------------- PWA: share target, file handlers, service worker ----------------
@@ -1618,6 +1624,20 @@ function aplicarPrefsIniciais() {
   preencherSelectDeTemas($('sel-tema'), prefs.tema);
   // Progressivo: o botão de colar direto só aparece onde a API existe.
   $('btn-colar-transferencia').hidden = !temLeituraDeClipboard();
+  ajustarFiltroDeArquivo();
+}
+
+// iPhone e iPad: o seletor do app Arquivos entende o accept só por tipo MIME
+// registrado no sistema, e .pgn não é um deles — as extensões da lista são
+// ignoradas e sobra o text/plain, que deixa escolhíveis apenas os .txt (os
+// .pgn aparecem apagados). Sem accept nenhum, tudo fica escolhível e o
+// arquivo é validado depois, na leitura do texto, como já acontece com o
+// compartilhamento. Nos outros sistemas o filtro é mantido, porque lá ele
+// funciona e poupa o usuário de garimpar entre arquivos que não servem.
+function ajustarFiltroDeArquivo() {
+  const ehIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (ehIOS) $('arquivo-pgn').removeAttribute('accept');
 }
 
 async function iniciar() {
