@@ -5,6 +5,7 @@ import { Chess, DEFAULT_POSITION, validateFen } from '../vendor/chess.js';
 import { iniciarAnunciador, anunciar, definirSom, acordarAudio } from './anunciador.js';
 import {
   resultadoFalado, descreverPosicaoBlocos, nomeCasa, descreverLanceFalado,
+  comentarioFalado,
 } from './fala.js';
 import { interpretarEntrada, resolverPromocao } from './parser.js';
 import {
@@ -316,10 +317,14 @@ function renderArvore() {
     cont.appendChild(p);
     return;
   }
-  if (raiz.comment) {
+  // A lista mostra o comentário já traduzido (setas e casas por extenso, sem
+  // os comandos de máquina); o texto cru fica guardado no PGN e na caixa de
+  // edição, que é onde ele pode ser mexido.
+  const comentRaiz = comentarioFalado(raiz.comment);
+  if (comentRaiz) {
     const c = document.createElement('p');
     c.className = 'comentario';
-    c.textContent = `{${raiz.comment}}`;
+    c.textContent = `{${comentRaiz}}`;
     cont.appendChild(c);
   }
   const ol = document.createElement('ol');
@@ -347,10 +352,11 @@ function renderLinhaLista(inicio, ol) {
       li.appendChild(s);
     }
     li.appendChild(botaoLance(no));
-    if (no.comment) {
+    const coment = comentarioFalado(no.comment);
+    if (coment) {
       const c = document.createElement('span');
       c.className = 'comentario';
-      c.textContent = ` {${no.comment}} `;
+      c.textContent = ` {${coment}} `;
       li.appendChild(c);
     }
     // Variantes deste lance (irmãos), só no nó principal do garfo.
@@ -1122,27 +1128,32 @@ function renderGuardados() {
   $('guardados-vazio').hidden = lista.length > 0;
   $('btn-apagar-todos').hidden = lista.length === 0;
   for (const g of lista) {
+    const nome = g.rotulo || g.jogadores || 'PGN guardado';
     const li = document.createElement('li');
     const abrir = document.createElement('button');
     abrir.type = 'button';
     abrir.className = 'guardado-abrir';
-    abrir.textContent = g.rotulo || g.jogadores || 'PGN guardado';
+    abrir.textContent = nome;
     abrir.addEventListener('click', () => abrirGuardado(g.id));
     li.appendChild(abrir);
 
+    // As ações de cada arquivo ficam atrás de um botão "Ações", como os
+    // painéis do resto do app: com cinco botões soltos por arquivo, uma
+    // lista de meia dúzia de PGNs virava uma parede para atravessar.
     const acoes = document.createElement('div');
     acoes.className = 'guardado-acoes';
-    const arquivo = arquivoParaCompartilhar(g.atual || g.original, nomeArquivoPgn(g.rotulo));
+    acoes.hidden = true;
+    const arquivo = arquivoParaCompartilhar(g.atual || g.original, nomeArquivoPgn(nome));
     if (arquivo) {
-      const comp = botao('Compartilhar', `Compartilhar: ${g.rotulo}`, async () => {
-        try { await compartilharPgn(arquivo, g.rotulo); } catch (e) {
+      const comp = botao('Compartilhar', `Compartilhar: ${nome}`, async () => {
+        try { await compartilharPgn(arquivo, nome); } catch (e) {
           if (e && e.name !== 'AbortError') anunciar('Não foi possível compartilhar. Use o botão Baixar.');
         }
       });
       acoes.appendChild(comp);
     }
     if (navigator.clipboard) {
-      acoes.appendChild(botao('Copiar', `Copiar: ${g.rotulo}`, async () => {
+      acoes.appendChild(botao('Copiar', `Copiar: ${nome}`, async () => {
         try {
           await navigator.clipboard.writeText(g.atual || g.original);
           anunciar('PGN copiado para a área de transferência.');
@@ -1151,19 +1162,49 @@ function renderGuardados() {
         }
       }));
     }
-    acoes.appendChild(botao('Baixar', `Baixar: ${g.rotulo}`, () => {
-      baixarPgn(g.atual || g.original, nomeArquivoPgn(g.rotulo));
+    acoes.appendChild(botao('Baixar', `Baixar: ${nome}`, () => {
+      baixarPgn(g.atual || g.original, nomeArquivoPgn(nome));
     }));
-    acoes.appendChild(botao('Apagar', `Apagar: ${g.rotulo}`, () => {
+    acoes.appendChild(botao('Apagar', `Apagar: ${nome}`, () => {
       confirmar('Apagar este PGN do aparelho?', () => {
+        const posicao = [...ol.children].indexOf(li);
         store.apagarGuardado(g.id);
         renderGuardados();
         anunciar('PGN apagado.');
+        focarAposApagarGuardado(posicao);
       });
     }));
+
+    const menu = botao('Ações', `Ações: ${nome}`, () => alternarAcoesGuardado(menu, acoes));
+    menu.className = 'guardado-menu';
+    menu.setAttribute('aria-expanded', 'false');
+    li.appendChild(menu);
     li.appendChild(acoes);
     ol.appendChild(li);
   }
+}
+
+// Um menu aberto por vez: dois abertos e a lista volta a ficar comprida,
+// que é justamente o que o menu veio evitar.
+function alternarAcoesGuardado(menu, acoes) {
+  const abrir = acoes.hidden;
+  for (const outro of $('lista-guardados').querySelectorAll('.guardado-acoes')) {
+    if (outro === acoes) continue;
+    outro.hidden = true;
+    outro.parentElement.querySelector('.guardado-menu').setAttribute('aria-expanded', 'false');
+  }
+  acoes.hidden = !abrir;
+  menu.setAttribute('aria-expanded', String(abrir));
+}
+
+// Apagar refaz a lista inteira, e o botão apertado deixa de existir: sem
+// levar o foco, o leitor de tela fica sem lugar nenhum. Vai para o arquivo
+// que assumiu a posição do apagado — ou para o título da seção, se acabaram.
+function focarAposApagarGuardado(posicao) {
+  const itens = $('lista-guardados').children;
+  if (!itens.length) { $('titulo-guardados').focus(); return; }
+  const i = Math.min(posicao, itens.length - 1);
+  itens[i].querySelector('.guardado-abrir').focus();
 }
 
 function atualizarGuardadosSeVisivel() {

@@ -153,6 +153,92 @@ export function nagsFalados(nags) {
   return ditos.length ? ditos.join(', ') : '';
 }
 
+// ---------------- Comentários com anotações gráficas ----------------
+
+// Programas de estudo (Lichess, ChessBase) escondem dentro do comentário
+// comandos entre colchetes que desenham setas e pintam casas no tabuleiro.
+// Lidos crus viram sopa de letras — "cal G d2 d4" —, então são traduzidos:
+// as setas e as casas viram frase, o resto (relógio, tempo gasto e comandos
+// que não conhecemos) simplesmente sai da fala. O texto do PGN não muda: só
+// a forma falada é que é limpa.
+const RE_COMANDO_COMENTARIO = /\[%([a-zA-Z_]+)\s*([^\]]*)\]/g;
+
+// A letra da cor é a inicial em inglês (green, red, yellow, blue).
+const CORES_ANOTACAO = {
+  G: { fem: 'verde', masc: 'verde' },
+  R: { fem: 'vermelha', masc: 'vermelho' },
+  Y: { fem: 'amarela', masc: 'amarelo' },
+  B: { fem: 'azul', masc: 'azul' },
+};
+
+function listaSetas(valor) {
+  const itens = [];
+  for (const bruto of valor.split(',')) {
+    const m = /^([GRYB]?)([a-h][1-8])([a-h][1-8])$/.exec(bruto.trim());
+    if (!m) continue;
+    const cor = CORES_ANOTACAO[m[1]];
+    itens.push(`${cor ? `${cor.fem} ` : ''}de ${nomeCasa(m[2])} a ${nomeCasa(m[3])}`);
+  }
+  return itens;
+}
+
+function listaCasasMarcadas(valor) {
+  const itens = [];
+  for (const bruto of valor.split(',')) {
+    const m = /^([GRYB]?)([a-h][1-8])$/.exec(bruto.trim());
+    if (!m) continue;
+    const cor = CORES_ANOTACAO[m[1]];
+    itens.push(`${nomeCasa(m[2])}${cor ? ` em ${cor.masc}` : ''}`);
+  }
+  return itens;
+}
+
+// Avaliação de motor: "0.35" (vantagem em peões, positivo para as brancas)
+// ou "#-3" (mate em 3 para as pretas).
+function avaliacaoFalada(valor) {
+  const t = valor.trim();
+  const mate = /^#(-?)(\d+)$/.exec(t);
+  if (mate) return `Avaliação: mate em ${mate[2]} para as ${mate[1] ? 'pretas' : 'brancas'}`;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return '';
+  if (Math.abs(n) < 0.05) return 'Avaliação: posição igual';
+  const numero = Math.abs(n).toFixed(2).replace('.', ',');
+  return `Avaliação: ${numero} para as ${n > 0 ? 'brancas' : 'pretas'}`;
+}
+
+function pontuar(frase) {
+  return /[.!?…]$/.test(frase) ? frase : `${frase}.`;
+}
+
+// Forma falada (e mostrada na lista) de um comentário do PGN.
+export function comentarioFalado(texto) {
+  if (!texto) return '';
+  const setas = [];
+  const casas = [];
+  let avaliacao = '';
+  const prosa = texto
+    .replace(RE_COMANDO_COMENTARIO, (_, comando, valor) => {
+      switch (comando.toLowerCase()) {
+        case 'cal': setas.push(...listaSetas(valor)); break;
+        case 'csl': casas.push(...listaCasasMarcadas(valor)); break;
+        case 'eval': avaliacao = avaliacaoFalada(valor) || avaliacao; break;
+        default: break; // %clk, %emt e desconhecidos: fora da fala
+      }
+      return ' ';
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const partes = [];
+  if (prosa) partes.push(pontuar(prosa));
+  if (setas.length === 1) partes.push(`Seta ${setas[0]}.`);
+  else if (setas.length) partes.push(`Setas: ${setas.join('; ')}.`);
+  if (casas.length === 1) partes.push(`Casa marcada: ${casas[0]}.`);
+  else if (casas.length) partes.push(`Casas marcadas: ${casas.join(', ')}.`);
+  if (avaliacao) partes.push(`${avaliacao}.`);
+  return partes.join(' ');
+}
+
 // ---------------- Descrição de posição (por blocos) ----------------
 
 const ORDEM_PECAS = ['k', 'q', 'r', 'b', 'n', 'p'];

@@ -8,7 +8,7 @@ import { Chess } from '../vendor/chess.js';
 import { anunciar, somLance } from './anunciador.js';
 import {
   descreverLanceFalado, fraseXeque, resultadoFalado, nagsFalados, nomeCor,
-  nomePeca, VALOR_PECAS,
+  nomePeca, comentarioFalado, VALOR_PECAS,
 } from './fala.js';
 import {
   nivel, ehEntradaVariante, indicesDoCaminho, revalidarSubarvore,
@@ -550,11 +550,14 @@ export class Leitura {
     this.aoMudar();
   }
 
+  // O comentário entra sem a palavra "comentário" na frente: quem ouve já
+  // percebe que aquilo é texto do anotador, e o rótulo só atrasava a leitura.
   _extrasFalados(no) {
     const partes = [];
     const nag = nagsFalados(no.nags);
     if (nag) partes.push(nag);
-    if (no.comment) partes.push(`Comentário: ${no.comment}`);
+    const coment = comentarioFalado(no.comment);
+    if (coment) partes.push(coment);
     return partes.join('. ');
   }
 
@@ -603,7 +606,7 @@ export class Leitura {
     if (no.children[0]) {
       texto += `, depois ${descreverLanceFalado(no.children[0].move)}`;
     }
-    const coment = no.commentBefore || no.comment;
+    const coment = comentarioFalado(no.commentBefore || no.comment);
     if (coment) texto += ` — ${coment}`;
     return texto;
   }
