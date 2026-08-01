@@ -5,7 +5,7 @@ import { Chess, DEFAULT_POSITION, validateFen } from '../vendor/chess.js';
 import { iniciarAnunciador, anunciar, definirSom, acordarAudio } from './anunciador.js';
 import {
   resultadoFalado, descreverPosicaoBlocos, nomeCasa, descreverLanceFalado,
-  comentarioFalado,
+  comentarioFalado, nomeFormatoDescricao,
 } from './fala.js';
 import { interpretarEntrada, resolverPromocao } from './parser.js';
 import {
@@ -29,7 +29,41 @@ let arquivoAtual = null; // { guardadoId, original, partidas: [...], rotulo }
 let partidaIdx = 0;
 let leitura = null;      // instância de Leitura
 let tabuleiro = null;
-let avisouArquivoGrande = false;
+let avisouNaoGuardou = false;
+let avisouSoLeitura = false;
+let avisouSemEspacoAoSalvar = false;
+
+// Não coube: a partida abre e é lida igual, só não fica na lista do app — e
+// nenhum PGN da pessoa foi apagado por causa dela. Cada motivo tem a sua
+// frase porque cada um deixa uma saída diferente nas mãos de quem ouve.
+//
+// Todas dizem "neste app", nunca "no aparelho": o que acabou é a lista de
+// PGNs guardados aqui dentro, não o espaço do celular. A diferença importa —
+// "não coube no aparelho" seguido de "baixe o arquivo" é uma contradição, já
+// que baixar é justamente gravar no aparelho, e isso continua funcionando.
+const NAO_GUARDOU = {
+  'sem-espaco': 'Acabou o espaço que este app tem para guardar PGNs. A leitura funciona '
+    + 'normalmente, mas a partida não será mantida aqui. Para mantê-la, apague algum PGN '
+    + 'na tela inicial.',
+  'lista-cheia': 'Já há 20 PGNs guardados, que é o máximo. A leitura funciona normalmente, '
+    + 'mas a partida não será mantida neste app. Apague algum PGN na tela inicial '
+    + 'para abrir vaga.',
+  indisponivel: 'Este navegador não está deixando guardar nada; o app segue como leitor, '
+    + 'mas nada fica salvo ao fechar.',
+  grande: 'Arquivo grande demais; não será mantido neste app. Para reler, abra o arquivo '
+    + 'de novo.',
+};
+
+// Arquivo grande guardado sem cópia editável: ele reabre e retoma a posição,
+// mas as anotações não sobrevivem ao fechamento do app. Dizer isso ANTES de a
+// pessoa anotar meia hora é o mínimo — e uma vez por sessão basta, senão vira
+// ladainha a cada arquivo aberto.
+function avisarSoLeitura() {
+  if (avisouSoLeitura) return;
+  avisouSoLeitura = true;
+  setTimeout(() => anunciar('Arquivo grande. Fica neste app para reabrir e continuar de onde '
+    + 'parou, mas as alterações não são mantidas: para levá-las, use Salvar novo PGN.'), 1500);
+}
 
 // ---------------- Utilidades de fala/rótulo ----------------
 
@@ -98,7 +132,7 @@ async function lerTextoArquivo(file) {
 
 // ---------------- Abrir PGN (as quatro portas convergem aqui) ----------------
 
-function abrirTextoPgn(texto, { guardadoId = null, posicao = null } = {}) {
+function abrirTextoPgn(texto, { guardadoId = null, posicao = null, nomeArquivo = null } = {}) {
   // Reabrir um arquivo já guardado (mesmo texto original) renova a entrada
   // em vez de duplicá-la, e recupera as edições autossalvas e a posição.
   if (!guardadoId) {
@@ -116,30 +150,52 @@ function abrirTextoPgn(texto, { guardadoId = null, posicao = null } = {}) {
     return false;
   }
 
-  const rotulo = descreverPartida(partidas[0].tags, partidas[0].resultado);
+  // O texto importado de verdade fica separado do que está sendo lido: numa
+  // reabertura, `texto` já é a cópia com as edições da sessão passada, e é o
+  // original guardado que o "Restaurar original" tem de devolver.
+  const guardado = guardadoId ? store.obterGuardado(guardadoId) : null;
+  const textoOriginal = guardado ? guardado.original : texto;
+
+  // Num arquivo de uma partida só, o rótulo é a própria partida. Numa coleção
+  // não: "Livro de finais.pgn" é o que a pessoa reconhece na lista, enquanto o
+  // nome dos dois jogadores da PRIMEIRA partida não diz nada sobre as outras
+  // nove mil. Quando o nome do arquivo existe, é ele que manda na coleção.
+  const rotuloPartida = descreverPartida(partidas[0].tags, partidas[0].resultado);
+  const nome = nomeArquivo || (guardado && guardado.nomeArquivo) || null;
+  const rotulo = (partidas.length > 1 && nome) ? semExtensaoPgn(nome) : rotuloPartida;
   arquivoAtual = {
     guardadoId,
-    original: texto,
+    original: textoOriginal,
     partidas,
     rotulo,
+    nomeArquivo: nome,
+    soLeitura: Boolean(guardado && guardado.soLeitura),
+    modificado: textoOriginal.trim() !== texto.trim(),
   };
 
-  // Guarda (ou renova) o arquivo, salvo se for grande demais.
-  if (!guardadoId) {
+  // Guarda (ou renova) o arquivo — se a pessoa quiser guardar, e se couber.
+  if (!guardadoId && prefs.guardarAutomatico) {
     const r = store.guardarPgn({
       original: texto,
       atual: texto,
       rotulo,
+      nomeArquivo: nome,
       jogadores: `${nomeJogador(partidas[0].tags.White) || 'Brancas'} x ${nomeJogador(partidas[0].tags.Black) || 'Pretas'}`,
       resultado: partidas[0].resultado,
     });
     if (r.guardado) {
       arquivoAtual.guardadoId = r.id;
-    } else if (r.motivo === 'grande' && !avisouArquivoGrande) {
-      avisouArquivoGrande = true;
-      setTimeout(() => anunciar('Arquivo grande; não ficará guardado. Para reler, abra o arquivo de novo.'), 1200);
+      arquivoAtual.soLeitura = r.soLeitura;
+      if (r.soLeitura) avisarSoLeitura();
+    } else if (!avisouNaoGuardou) {
+      avisouNaoGuardou = true;
+      setTimeout(() => anunciar(NAO_GUARDOU[r.motivo] || NAO_GUARDOU.grande), 1200);
     }
+  } else if (!guardadoId) {
+    // Guardar está desligado: leitura pura, e o app não finge que salvou.
+    arquivoAtual.guardadoId = null;
   } else {
+    if (arquivoAtual.soLeitura) avisarSoLeitura();
     store.renovarAcesso(guardadoId);
   }
 
@@ -159,39 +215,101 @@ function abrirTextoPgn(texto, { guardadoId = null, posicao = null } = {}) {
 }
 
 // Paginação: coleções gigantes (bancos com milhares de partidas) renderizam
-// em lotes para a lista nunca travar o app (seção 8 da especificação).
-const LOTE_LISTA = 50;
-let listaLimite = 0;
+// uma página por vez para a lista nunca travar o app (seção 8 da
+// especificação) e, principalmente, para caber na cabeça de quem percorre a
+// lista de ouvido — 50 botões já são bastante.
+const POR_PAGINA = 50;
+let paginaLista = 0;
 
-function mostrarListaPartidas(mensagem) {
+function totalPaginas() {
+  return Math.max(1, Math.ceil(arquivoAtual.partidas.length / POR_PAGINA));
+}
+
+// `naPartidaAtual` abre a lista já na página da partida em leitura — é o que
+// "Trocar de partida" quer: a vizinhança de onde a pessoa está, não o começo
+// de um arquivo de mil partidas.
+function mostrarListaPartidas(mensagem, { naPartidaAtual = false } = {}) {
   mostrarTela('tela-lista');
   $('lista-descricao').textContent = mensagem;
-  $('lista-partidas').textContent = '';
-  listaLimite = 0;
-  acrescentarLotePartidas();
+  paginaLista = naPartidaAtual ? Math.floor(partidaIdx / POR_PAGINA) : 0;
+  renderPaginaLista();
   anunciar(mensagem);
 }
 
-function acrescentarLotePartidas() {
-  const ol = $('lista-partidas');
+function renderPaginaLista({ focarPartida = null } = {}) {
   const total = arquivoAtual.partidas.length;
-  const fim = Math.min(listaLimite + LOTE_LISTA, total);
-  for (let i = listaLimite; i < fim; i++) {
+  const paginas = totalPaginas();
+  paginaLista = Math.min(Math.max(paginaLista, 0), paginas - 1);
+  const inicio = paginaLista * POR_PAGINA;
+  const fim = Math.min(inicio + POR_PAGINA, total);
+
+  const ol = $('lista-partidas');
+  ol.textContent = '';
+  ol.start = inicio + 1;
+  for (let i = inicio; i < fim; i++) {
     const p = arquivoAtual.partidas[i];
     const li = document.createElement('li');
     const b = document.createElement('button');
     b.type = 'button';
-    b.textContent = descreverPartida(p.tags, p.resultado);
+    // O número vai no texto do botão, não só na numeração do <ol>: é o que o
+    // leitor de tela fala ao pousar nele, e é assim que a pessoa sabe em que
+    // ponto da coleção está sem contar item por item.
+    b.textContent = `${i + 1}. ${descreverPartida(p.tags, p.resultado)}`;
+    b.dataset.partida = String(i);
     b.addEventListener('click', () => abrirPartida(i));
     li.appendChild(b);
     ol.appendChild(li);
   }
-  listaLimite = fim;
-  const btnMais = $('btn-mais-partidas');
-  btnMais.hidden = listaLimite >= total;
-  if (!btnMais.hidden) {
-    btnMais.textContent = `Mostrar mais ${Math.min(LOTE_LISTA, total - listaLimite)} partidas`;
+
+  const paginado = paginas > 1;
+  $('paginacao-partidas').hidden = !paginado;
+  if (paginado) {
+    $('paginacao-info').textContent = `Página ${paginaLista + 1} de ${paginas}. `
+      + `Partidas ${inicio + 1} a ${fim} de ${total}.`;
+    $('btn-pagina-anterior').disabled = paginaLista === 0;
+    $('btn-pagina-proxima').disabled = paginaLista >= paginas - 1;
+    $('campo-pagina').max = String(paginas);
+    $('campo-partida').max = String(total);
   }
+
+  if (focarPartida !== null) {
+    ol.querySelector(`button[data-partida="${focarPartida}"]`)?.focus();
+  }
+}
+
+// Trocar de página leva o foco para a linha de informação da paginação: ela
+// diz em voz alta onde a pessoa foi parar ("Página 3 de 8, partidas 101 a
+// 150"), e dali um passo à frente já é o primeiro botão da página nova. Um
+// anúncio por aria-live junto com a mudança de foco só faria os dois textos
+// se atropelarem.
+function irParaPagina(numero) {
+  const paginas = totalPaginas();
+  if (!Number.isInteger(numero) || numero < 1 || numero > paginas) {
+    anunciar(`Página inválida. O arquivo tem ${paginas} ${paginas === 1 ? 'página' : 'páginas'}.`);
+    return;
+  }
+  paginaLista = numero - 1;
+  renderPaginaLista();
+  $('paginacao-info').focus();
+}
+
+// "Ir para a partida" não abre a partida: leva até ela e põe o foco no botão,
+// que se apresenta ("137. Fulano contra Sicrano..."). Abrir direto tiraria a
+// chance de conferir se o número era mesmo aquele.
+function irParaNumeroDePartida(numero) {
+  const total = arquivoAtual.partidas.length;
+  if (!Number.isInteger(numero) || numero < 1 || numero > total) {
+    anunciar(`Partida inválida. O arquivo tem ${total} ${total === 1 ? 'partida' : 'partidas'}.`);
+    return;
+  }
+  paginaLista = Math.floor((numero - 1) / POR_PAGINA);
+  renderPaginaLista({ focarPartida: numero - 1 });
+}
+
+// Campo vazio ou com lixo devolve NaN, que as funções acima recusam com a
+// mensagem certa em vez de saltar para lugar nenhum.
+function numeroDoCampo(id) {
+  return parseInt($(id).value, 10);
 }
 
 function abrirPartida(idx, { indices = null } = {}) {
@@ -200,7 +318,7 @@ function abrirPartida(idx, { indices = null } = {}) {
   leitura = new Leitura(partida, {
     perguntarBifurcacoes: () => prefs.perguntarBifurcacoes,
     aoMudar: () => { render(); persistirPosicao(); },
-    aoAlterar: persistir,
+    aoAlterar: registrarAlteracao,
     aoAbrirBifurcacao: abrirBifurcacao,
   });
   if (indices && indices.length) {
@@ -213,14 +331,35 @@ function abrirPartida(idx, { indices = null } = {}) {
   // Fecha caixas reveláveis do painel.
   fecharRevelaveis();
   const nomes = cabecalhoCurto(partida.tags, partida.resultado);
+  // Numa coleção, o número da partida entra na frente do nome: percorrendo
+  // partida a partida, é ele que diz onde a pessoa está no arquivo.
+  const total = arquivoAtual.partidas.length;
+  const onde = total > 1 ? `Partida ${idx + 1} de ${total}.` : 'Partida carregada.';
   if (!partida.temLances) {
-    anunciar(`Partida carregada. ${nomes}. Partida sem lances registrados.`);
+    anunciar(`${onde} ${nomes}. Partida sem lances registrados.`);
   } else if (leitura.caminho.length > 1) {
-    anunciar(`Partida carregada. ${nomes}. Retomada no lance ${leitura.caminho.length - 1}.`);
+    anunciar(`${onde} ${nomes}. Retomada no lance ${leitura.caminho.length - 1}.`);
   } else {
-    anunciar(`Partida carregada. ${nomes}.`);
+    anunciar(`${onde} ${nomes}.`);
   }
   persistir();
+}
+
+// Próxima/anterior partida do arquivo. Nos extremos os botões respondem em
+// voz alta em vez de ficarem mortos — mesma regra dos botões de lance.
+function irParaPartidaVizinha(passo) {
+  if (!arquivoAtual) return;
+  const total = arquivoAtual.partidas.length;
+  const novo = partidaIdx + passo;
+  if (novo < 0) {
+    anunciar('Esta já é a primeira partida do arquivo.');
+    return;
+  }
+  if (novo >= total) {
+    anunciar('Esta já é a última partida do arquivo.');
+    return;
+  }
+  abrirPartida(novo);
 }
 
 // ---------------- Renderização da tela de leitura ----------------
@@ -258,7 +397,11 @@ function render() {
 
   // Restaurar original: habilitado só quando há alterações
   $('btn-restaurar').disabled = !arquivoFoiModificado();
-  $('btn-trocar-partida').hidden = arquivoAtual.partidas.length < 2;
+  const varias = arquivoAtual.partidas.length > 1;
+  $('nav-partidas').hidden = !varias;
+  if (varias) {
+    $('indicador-partida').textContent = `Partida ${partidaIdx + 1} de ${arquivoAtual.partidas.length}`;
+  }
 
   // Tabuleiro
   if (tabuleiro && !$('area-tabuleiro').hidden) {
@@ -435,12 +578,23 @@ function configurarTabuleiro() {
   aplicarPrefTabuleiro();
 }
 
+// As duas formas de ver a partida não precisam ser iguais, e não são: com o
+// tabuleiro à vista, andar nos lances é o gesto do momento e as setas ficam
+// coladas nele; sem tabuleiro, é "Descrever posição" que vira o gesto do
+// momento — é a única forma de saber onde estão as peças —, então ele sai do
+// painel e fica fixo na tela. O que nunca acontece é o mesmo comando aparecer
+// duas vezes na mesma tela.
 function aplicarPrefTabuleiro() {
   const mostrar = prefs.tabuleiro;
   $('area-tabuleiro').hidden = !mostrar;
   // Os botões de seta só existem enquanto o tabuleiro está à vista; sem ele
   // seriam um par de alvos duplicados no caminho do leitor de tela.
   $('nav-tabuleiro').hidden = !mostrar;
+  $('linha-lances-texto').hidden = mostrar;
+  // "Descrever posição" troca de lugar em vez de existir nos dois: fixo na
+  // tela no modo sem tabuleiro, dentro do painel de ações no modo com.
+  $('btn-descrever-fixo').hidden = mostrar;
+  $('btn-descrever').hidden = !mostrar;
   $('btn-tabuleiro').setAttribute('aria-expanded', String(mostrar));
   $('btn-tabuleiro').textContent = mostrar ? 'Ocultar tabuleiro' : 'Mostrar tabuleiro';
   if (mostrar && leitura) {
@@ -523,13 +677,21 @@ $('btn-cancelar-bifurcacao').addEventListener('click', () => $('dialogo-bifurcac
 
 // ---------------- Persistência ----------------
 
+// Partida que nunca chegou a ser aberta continua sendo, letra por letra, o
+// que veio no arquivo: copiar o texto dela é mais fiel (nenhuma reescrita de
+// formatação) e evita montar a árvore de mil partidas só para regravar uma.
 function textoAtualArquivo() {
-  return arquivoAtual.partidas.map((p) => gerarPgnCompleto(p)).join('\n\n');
+  return arquivoAtual.partidas
+    .map((p) => (p.intacta ? p.textoBruto : gerarPgnCompleto(p)).trim())
+    .join('\n\n');
 }
 
+// Bandeira, não comparação de textos: `render()` roda a cada lance navegado,
+// e regerar o PGN inteiro para comparar travaria a navegação num arquivo de
+// mil partidas. Quem levanta a bandeira é `persistir()`, chamado em toda
+// mutação; só o "Restaurar original" a abaixa.
 function arquivoFoiModificado() {
-  if (!arquivoAtual) return false;
-  return textoAtualArquivo().trim() !== arquivoAtual.original.trim();
+  return Boolean(arquivoAtual && arquivoAtual.modificado);
 }
 
 // Posição de leitura: salva a cada navegação (com um pequeno debounce para
@@ -558,13 +720,31 @@ function persistirPosicao() {
 }
 
 // Mutações (lances novos, comentários, cabeçalho): salvam o texto editado
-// na cópia guardada, além da posição.
+// na cópia guardada, além da posição. No guardado só de leitura não há cópia
+// editada para salvar — e nem se gera o texto, que num arquivo grande custa
+// caro à toa.
 function persistir() {
   if (!arquivoAtual || !leitura) return;
-  if (arquivoAtual.guardadoId) {
-    store.atualizarGuardado(arquivoAtual.guardadoId, { atual: textoAtualArquivo() });
+  if (arquivoAtual.guardadoId && !arquivoAtual.soLeitura) {
+    const r = store.atualizarGuardado(arquivoAtual.guardadoId, { atual: textoAtualArquivo() });
+    // Alteração que não coube é trabalho que se perde ao fechar: isso não pode
+    // acontecer em silêncio. Uma vez por sessão, para não virar ladainha a
+    // cada lance anotado.
+    if (!r.ok && r.motivo === 'sem-espaco' && !avisouSemEspacoAoSalvar) {
+      avisouSemEspacoAoSalvar = true;
+      anunciar('As alterações desta partida não estão sendo mantidas neste app: elas valem '
+        + 'enquanto ele estiver aberto. Apague algum PGN na tela inicial para abrir espaço, '
+        + 'ou use Salvar novo PGN para levá-las.');
+    }
   }
   persistirPosicao();
+}
+
+// Toda mutação passa por aqui (é o `aoAlterar` da Leitura) — e só por aqui,
+// nunca pela abertura de uma partida, que também persiste mas não altera nada.
+function registrarAlteracao() {
+  if (arquivoAtual) arquivoAtual.modificado = true;
+  persistir();
 }
 
 // ---------------- Ações do painel ----------------
@@ -580,8 +760,16 @@ async function copiarFen() {
 }
 
 function descreverPosicaoDialogo() {
+  renderDescricao();
+  $('dialogo-descrever').showModal();
+  // Foco no título: o conteúdo do diálogo é para ler, então a leitura começa
+  // no começo dele, e não no botão do fim.
+  $('titulo-descrever').focus();
+}
+
+function renderDescricao() {
   const chess = new Chess(estadoFen());
-  const blocos = descreverPosicaoBlocos(chess);
+  const blocos = descreverPosicaoBlocos(chess, prefs.formatoDescricao);
   const cont = $('blocos-descricao');
   cont.textContent = '';
   for (const bloco of blocos) {
@@ -589,7 +777,23 @@ function descreverPosicaoDialogo() {
     p.textContent = bloco;
     cont.appendChild(p);
   }
-  $('dialogo-descrever').showModal();
+  // O botão diz para onde ele leva, não onde se está: é o rótulo que funciona
+  // sem ver o resto da tela.
+  const outro = outroFormatoDescricao();
+  $('btn-formato-descricao').textContent = `Mudar para descrição ${nomeFormatoDescricao(outro)}`;
+}
+
+function outroFormatoDescricao() {
+  return prefs.formatoDescricao === 'fen' ? 'pecas' : 'fen';
+}
+
+function alternarFormatoDescricao() {
+  prefs.formatoDescricao = outroFormatoDescricao();
+  store.gravarPreferencias({ formatoDescricao: prefs.formatoDescricao });
+  renderDescricao();
+  // Volta ao começo da descrição: o texto todo mudou, e reler do início é o
+  // motivo de ter trocado de formato.
+  $('titulo-descrever').focus();
 }
 
 function abrirComentario() {
@@ -627,7 +831,12 @@ function popularSelectDestino(idSelect) {
   novo.value = '';
   novo.textContent = 'Novo arquivo guardado';
   sel.appendChild(novo);
-  const lista = store.lerGuardados().sort((a, b) => b.ultimoAcesso - a.ultimoAcesso);
+  // Guardado só de leitura fica fora da lista: ele não tem cópia editável
+  // para receber a partida nova, e oferecê-lo seria oferecer um destino que
+  // recusa tudo.
+  const lista = store.lerGuardados()
+    .filter((g) => !g.soLeitura)
+    .sort((a, b) => b.ultimoAcesso - a.ultimoAcesso);
   for (const g of lista) {
     const op = document.createElement('option');
     op.value = g.id;
@@ -655,7 +864,7 @@ function acrescentarAoGuardado(destino, texto) {
     // o autossalvamento seguinte apagaria a partida recém-adicionada.
     const { partidas } = lerPgn(texto);
     arquivoAtual.partidas.push(...partidas);
-    $('btn-trocar-partida').hidden = arquivoAtual.partidas.length < 2;
+    $('nav-partidas').hidden = arquivoAtual.partidas.length < 2;
     store.atualizarGuardado(destino.id, { atual: textoAtualArquivo() });
   } else {
     store.atualizarGuardado(destino.id, { atual: novoAtual });
@@ -692,14 +901,20 @@ function prepararSalvar(modo) {
     if (erro) { anunciar(erro); return; }
     mensagem = `Partida adicionada a: ${destino.rotulo}. Baixe ou compartilhe a partida salva.`;
   } else {
-    // Guarda como novo arquivo entre os guardados.
-    store.guardarPgn({
+    // Guarda como novo arquivo entre os guardados. Salvar é ato explícito, e
+    // acontece mesmo com o "guardar automaticamente" desligado — mas se não
+    // couber, a mensagem tem de dizer, senão a pessoa vai embora achando que
+    // guardou. O arquivo continua pronto para baixar ou compartilhar.
+    const r = store.guardarPgn({
       original: texto,
       atual: texto,
       rotulo: `${arquivoAtual.rotulo} (salvo)`,
       jogadores: arquivoAtual.rotulo,
       resultado: partida.resultado,
     });
+    if (!r.guardado) {
+      mensagem = 'O PGN está pronto, mas não será mantido neste app.';
+    }
   }
   $('dialogo-salvar').querySelector('.opcoes-coluna').hidden = true;
   $('area-salvar-pronto').hidden = false;
@@ -707,7 +922,7 @@ function prepararSalvar(modo) {
   // Compartilhar só aparece se o navegador aceita algum dos formatos (.pgn ou .txt)
   $('btn-compartilhar-salvo').hidden = arquivoParaCompartilhar(texto, pgnParaSalvar.nome) === null;
   $('btn-copiar-salvo').hidden = !navigator.clipboard;
-  anunciar(destino ? 'Partida adicionada.' : 'PGN salvo.');
+  anunciar(mensagem);
   atualizarGuardadosSeVisivel();
   $('btn-baixar-salvo').focus();
 }
@@ -774,7 +989,14 @@ function criarPartida(fen) {
   // A criação nasce com a entrada de lances ligada (seção 3.6), sem alterar
   // a preferência guardada — o botão "Ocultar digitação" continua mandando.
   revelarDigitacao();
-  anunciar(fen ? 'Partida criada a partir do FEN. Jogue os lances.' : 'Partida nova. Jogue os lances.');
+  const base = fen ? 'Partida criada a partir do FEN.' : 'Partida nova.';
+  // Criar sem conseguir guardar é o caso mais perigoso de todos: a partida
+  // não existe em lugar nenhum além desta tela. Isso precisa ser dito na hora,
+  // não descoberto depois.
+  anunciar(r.guardado
+    ? `${base} Jogue os lances.`
+    : `${base} Atenção: ela não será mantida neste app, então só existe enquanto ele `
+      + 'estiver aberto. Use Salvar novo PGN para baixar ou compartilhar.');
 }
 
 function revelarDigitacao() {
@@ -1067,14 +1289,20 @@ async function colarDaAreaDeTransferencia() {
 // Decide sozinho entre FEN e PGN: o que sobra depois de normalizar valida
 // como FEN, abre como posição avulsa. Um PGN inteiro nunca passa por aí —
 // vira uma linha só, com campos demais. Devolve 'fen', 'pgn' ou null.
-function abrirTextoOuFen(texto) {
+function abrirTextoOuFen(texto, nomeArquivo = null) {
   const fen = normalizarFen(texto);
   if (fen && validateFen(fen).ok) {
     abrirFenAvulso(fen);
     return 'fen';
   }
   // O erro específico já é anunciado lá dentro quando não é PGN.
-  return abrirTextoPgn(texto) ? 'pgn' : null;
+  return abrirTextoPgn(texto, { nomeArquivo }) ? 'pgn' : null;
+}
+
+// "Livro de finais.pgn" vira "Livro de finais": a extensão é ruído numa lista
+// falada, e todo item dela é um PGN de qualquer jeito.
+function semExtensaoPgn(nome) {
+  return String(nome).replace(/\.(pgn|txt)$/i, '').trim() || String(nome);
 }
 
 // ---------------- Colar na página (Control mais V) ----------------
@@ -1095,7 +1323,7 @@ async function aoColarNaPagina(evento) {
   const arquivo = dados.files && dados.files[0];
   if (arquivo) {
     evento.preventDefault();
-    if (arquivo.size > store.LIMITES.LIMITE_POR_ARQUIVO) {
+    if (arquivo.size > store.LIMITES.LIMITE_SO_LEITURA) {
       anunciar(`O arquivo ${arquivo.name} é grande demais para este app.`);
       return;
     }
@@ -1106,7 +1334,7 @@ async function aoColarNaPagina(evento) {
       anunciar(`Não consegui ler o arquivo ${arquivo.name}.`);
       return;
     }
-    if (!abrirTextoOuFen(texto)) {
+    if (!abrirTextoOuFen(texto, arquivo.name)) {
       anunciar(`Não encontrei nenhuma partida válida em ${arquivo.name}.`);
     }
     return;
@@ -1133,7 +1361,9 @@ function renderGuardados() {
     const abrir = document.createElement('button');
     abrir.type = 'button';
     abrir.className = 'guardado-abrir';
-    abrir.textContent = nome;
+    // Com vinte arquivos na lista, saber qual deles não guarda as anotações
+    // tem de vir do próprio rótulo — não de lembrar de um aviso falado.
+    abrir.textContent = g.soLeitura ? `${nome} — só leitura` : nome;
     abrir.addEventListener('click', () => abrirGuardado(g.id));
     li.appendChild(abrir);
 
@@ -1165,8 +1395,18 @@ function renderGuardados() {
     acoes.appendChild(botao('Baixar', `Baixar: ${nome}`, () => {
       baixarPgn(g.atual || g.original, nomeArquivoPgn(nome));
     }));
+    // Abrir um guardado cai na última partida lida, que é o que quase sempre
+    // se quer. Quem quer outra precisa de um caminho direto para a lista sem
+    // ter de abrir uma partida qualquer antes para depois sair dela.
+    if (g.posicao && g.posicao.partidaIdx > 0) {
+      acoes.appendChild(botao('Ver lista de partidas', `Ver lista de partidas: ${nome}`, () => {
+        abrirGuardado(g.id, { naLista: true });
+      }));
+    }
     acoes.appendChild(botao('Apagar', `Apagar: ${nome}`, () => {
-      confirmar('Apagar este PGN do aparelho?', () => {
+      // "do aparelho" assustava à toa: apagar aqui tira o PGN da lista deste
+      // app, e o arquivo que a pessoa recebeu ou baixou continua onde estava.
+      confirmar('Apagar este PGN da lista deste app?', () => {
         const posicao = [...ol.children].indexOf(li);
         store.apagarGuardado(g.id);
         renderGuardados();
@@ -1220,10 +1460,80 @@ function botao(texto, rotuloAcessivel, onClick) {
   return b;
 }
 
-function abrirGuardado(id) {
+function abrirGuardado(id, { naLista = false } = {}) {
   const g = store.obterGuardado(id);
   if (!g) return;
-  abrirTextoPgn(g.atual || g.original, { guardadoId: id, posicao: g.posicao });
+  // Sem posição, a coleção abre na lista sozinha — é o caminho que o
+  // "Ver lista de partidas" reaproveita para não cair na última partida lida.
+  abrirTextoPgn(g.atual || g.original, {
+    guardadoId: id,
+    posicao: naLista ? null : g.posicao,
+  });
+}
+
+// ---------------- Espaço do aparelho ----------------
+
+// O tamanho é dito como o tamanho do ARQUIVO, um byte por caractere — que é
+// o número que a pessoa conhece, o que o celular mostra no gerenciador de
+// arquivos. Por dentro o navegador gasta o dobro (guarda tudo em UTF-16, dois
+// bytes por caractere, medido: ASCII e acentuado batem no mesmo teto de
+// caracteres), mas dizer que um livro de 1,6 MB "ocupa 3,2 MB" não ajuda
+// ninguém a decidir nada — é contabilidade interna do navegador. O que
+// interessa é quanto PGN cabe, e isso se mede em tamanho de PGN.
+function emMegabytes(caracteres) {
+  if (caracteres >= 1048576) {
+    return `${(caracteres / 1048576).toFixed(1).replace('.', ',')} MB`;
+  }
+  if (caracteres >= 1024) return `${Math.round(caracteres / 1024)} KB`;
+  return `${caracteres} bytes`;
+}
+
+function descrever(caracteres) {
+  return emMegabytes(caracteres);
+}
+
+let textoDasMedidas = '';
+
+// A medição escreve de verdade no armazenamento até o navegador recusar, e
+// leva um instante num celular: por isso ela avisa antes e só então mede,
+// para o anúncio não ficar preso atrás do trabalho.
+function medirEspacoDialogo() {
+  const cont = $('blocos-espaco');
+  cont.textContent = '';
+  const p = document.createElement('p');
+  p.textContent = 'Medindo o espaço deste aparelho…';
+  cont.appendChild(p);
+  $('btn-copiar-espaco').hidden = true;
+  $('dialogo-espaco').showModal();
+  $('titulo-espaco').focus();
+  anunciar('Medindo o espaço deste aparelho. Um instante.');
+  setTimeout(() => {
+    const guardados = store.lerGuardados();
+    const usado = store.tamanhoTotal(guardados);
+    const { livre, atingiuTeto } = store.medirEspacoLivre();
+    const linhas = [
+      guardados.length === 0
+        ? 'Guardados: nenhum arquivo.'
+        : `Guardados: ${guardados.length} ${guardados.length === 1 ? 'arquivo' : 'arquivos'}, somando ${descrever(usado)} de PGN.`,
+      atingiuTeto
+        ? `Ainda cabe: mais de ${descrever(livre)} de PGN. A medição parou de procurar aqui; neste aparelho o espaço não é problema.`
+        : `Ainda cabe: ${descrever(livre)} de PGN.`,
+      atingiuTeto
+        ? 'Teto deste navegador: acima do que a medição foi buscar.'
+        : `Teto estimado deste navegador: cerca de ${descrever(usado + livre)} de PGN no total.`,
+      `Regra do app: PGN até ${emMegabytes(store.LIMITES.LIMITE_POR_ARQUIVO)} guarda também as suas alterações; acima disso, é guardado só para leitura.`,
+    ];
+    textoDasMedidas = linhas.join('\n');
+    cont.textContent = '';
+    for (const linha of linhas) {
+      const item = document.createElement('p');
+      item.textContent = linha;
+      cont.appendChild(item);
+    }
+    $('btn-copiar-espaco').hidden = !navigator.clipboard;
+    $('titulo-espaco').focus();
+    anunciar(`Medição pronta. ${linhas[0]} ${linhas[1]}`);
+  }, 120);
 }
 
 // ---------------- Continuar última leitura ----------------
@@ -1259,7 +1569,8 @@ function restaurarOriginal() {
     const idx = partidaIdx;
     const { partidas } = lerPgn(texto);
     arquivoAtual.partidas = partidas;
-    if (arquivoAtual.guardadoId) {
+    arquivoAtual.modificado = false;
+    if (arquivoAtual.guardadoId && !arquivoAtual.soLeitura) {
       store.atualizarGuardado(arquivoAtual.guardadoId, { atual: texto });
     }
     abrirPartida(Math.min(idx, partidas.length - 1));
@@ -1335,8 +1646,9 @@ function ligarEventos() {
     const file = e.target.files[0];
     if (!file) return;
     const texto = await lerTextoArquivo(file);
+    const nomeArquivo = file.name;
     e.target.value = '';
-    abrirTextoPgn(texto);
+    abrirTextoPgn(texto, { nomeArquivo });
   });
   $('btn-colar-transferencia').addEventListener('click', colarDaAreaDeTransferencia);
   document.addEventListener('paste', aoColarNaPagina);
@@ -1367,8 +1679,26 @@ function ligarEventos() {
   });
   $('btn-criar-pgn').addEventListener('click', abrirCriar);
   $('btn-continuar').addEventListener('click', continuarUltima);
+  $('chk-guardar').addEventListener('change', (e) => {
+    prefs.guardarAutomatico = e.target.checked;
+    store.gravarPreferencias({ guardarAutomatico: prefs.guardarAutomatico });
+    // Desligar não apaga nada do que já está lá: quem apaga é a pessoa.
+    anunciar(prefs.guardarAutomatico
+      ? 'Os PGNs abertos voltam a ser mantidos neste app.'
+      : 'Os PGNs abertos não serão mais mantidos neste app. Os que já estão guardados continuam aí.');
+  });
+  $('btn-espaco').addEventListener('click', medirEspacoDialogo);
+  $('btn-fechar-espaco').addEventListener('click', () => $('dialogo-espaco').close());
+  $('btn-copiar-espaco').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(textoDasMedidas);
+      anunciar('Medidas copiadas para a área de transferência.');
+    } catch {
+      anunciar('Não foi possível copiar. As medidas estão na tela.');
+    }
+  });
   $('btn-apagar-todos').addEventListener('click', () => {
-    confirmar('Apagar todos os PGNs guardados do aparelho?', () => {
+    confirmar('Apagar todos os PGNs da lista deste app?', () => {
       store.apagarTodosGuardados();
       renderGuardados();
       anunciar('Todos os PGNs guardados foram apagados.');
@@ -1377,10 +1707,22 @@ function ligarEventos() {
 
   // Lista de partidas
   $('btn-voltar-inicial').addEventListener('click', irParaInicio);
-  $('btn-mais-partidas').addEventListener('click', () => {
-    acrescentarLotePartidas();
-    anunciar(`Mostrando ${listaLimite} de ${arquivoAtual.partidas.length} partidas.`);
+  $('btn-pagina-anterior').addEventListener('click', () => irParaPagina(paginaLista));
+  $('btn-pagina-proxima').addEventListener('click', () => irParaPagina(paginaLista + 2));
+  $('btn-ir-pagina').addEventListener('click', () => irParaPagina(numeroDoCampo('campo-pagina')));
+  $('btn-ir-partida').addEventListener('click', () => irParaNumeroDePartida(numeroDoCampo('campo-partida')));
+  // Enter no campo faz o que o botão ao lado faz: digitar o número e apertar
+  // Enter é o gesto natural, e obrigar a achar o "Ir" seria um passo a mais.
+  $('campo-pagina').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); irParaPagina(numeroDoCampo('campo-pagina')); }
   });
+  $('campo-partida').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); irParaNumeroDePartida(numeroDoCampo('campo-partida')); }
+  });
+
+  // Navegação entre partidas do arquivo
+  $('btn-partida-anterior').addEventListener('click', () => irParaPartidaVizinha(-1));
+  $('btn-partida-proxima').addEventListener('click', () => irParaPartidaVizinha(1));
 
   // Navegação de lances
   $('btn-anterior').addEventListener('click', () => leitura.anterior());
@@ -1433,6 +1775,7 @@ function ligarEventos() {
   });
   $('btn-carregar-fen').addEventListener('click', carregarFen);
   $('btn-descrever').addEventListener('click', descreverPosicaoDialogo);
+  $('btn-descrever-fixo').addEventListener('click', descreverPosicaoDialogo);
   $('btn-comentar').addEventListener('click', abrirComentario);
   $('btn-gravar-comentario').addEventListener('click', () => {
     leitura.adicionarComentario($('campo-comentario').value);
@@ -1443,9 +1786,16 @@ function ligarEventos() {
   $('btn-editar-cabecalho').addEventListener('click', editarCabecalhoDialogo);
   $('btn-salvar-pgn').addEventListener('click', abrirSalvar);
   $('btn-restaurar').addEventListener('click', restaurarOriginal);
-  $('btn-trocar-partida').addEventListener('click', () => {
-    mostrarListaPartidas(`Arquivo com ${arquivoAtual.partidas.length} partidas. Escolha uma da lista.`);
-  });
+  const verLista = () => {
+    mostrarListaPartidas(
+      `Arquivo com ${arquivoAtual.partidas.length} partidas. Escolha uma da lista.`,
+      { naPartidaAtual: true },
+    );
+  };
+  // O mesmo comando em dois botões seria duplicação — mas "Trocar de partida"
+  // vive no painel de ações, que vem recolhido, e voltar à lista não pode
+  // custar abrir um painel. O do painel sai; fica o que está sempre à vista.
+  $('btn-ver-lista').addEventListener('click', verLista);
   $('btn-outro-pgn').addEventListener('click', irParaInicio);
   $('btn-voltar-inicial-leitura').addEventListener('click', irParaInicio);
 
@@ -1522,6 +1872,7 @@ function ligarEventos() {
   $('btn-cancelar-criar').addEventListener('click', () => $('dialogo-criar').close());
 
   // Diálogo: descrever
+  $('btn-formato-descricao').addEventListener('click', alternarFormatoDescricao);
   $('btn-fechar-descrever').addEventListener('click', () => $('dialogo-descrever').close());
 
   // Diálogo: promoção
@@ -1622,10 +1973,11 @@ async function verificarCompartilhamento() {
   try {
     const resp = await fetch('./__shared_pgn');
     if (resp && resp.ok) {
+      const nomeArquivo = decodeURIComponent(resp.headers.get('X-Nome-Arquivo') || '') || null;
       const texto = await resp.text();
       history.replaceState(null, '', './');
       if (texto.trim()) {
-        abrirTextoPgn(texto);
+        abrirTextoPgn(texto, { nomeArquivo });
         return true;
       }
     }
@@ -1641,7 +1993,7 @@ function configurarFileHandler() {
       try {
         const blob = await params.files[0].getFile();
         const texto = await lerTextoArquivo(blob);
-        abrirTextoPgn(texto);
+        abrirTextoPgn(texto, { nomeArquivo: blob.name || params.files[0].name });
       } catch { /* ignora */ }
     });
   }
@@ -1659,8 +2011,10 @@ function aplicarPrefsIniciais() {
   definirSom(prefs.som);
   $('chk-som').checked = prefs.som;
   $('chk-perguntar').checked = prefs.perguntarBifurcacoes;
+  $('chk-guardar').checked = prefs.guardarAutomatico;
   // Tema das casas (baixa visão): aplicado já na carga, antes do tabuleiro.
   prefs.tema = obterTema(prefs.tema).id; // id inválido cai no padrão
+  if (prefs.formatoDescricao !== 'fen') prefs.formatoDescricao = 'pecas';
   aplicarTema(prefs.tema);
   preencherSelectDeTemas($('sel-tema'), prefs.tema);
   // Progressivo: o botão de colar direto só aparece onde a API existe.

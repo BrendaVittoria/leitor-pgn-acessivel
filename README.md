@@ -60,9 +60,23 @@ lances por digitação ou pelo tabuleiro.
   (ajuda). Digitar com o foco no tabuleiro leva
   a letra direto para a caixa.
 - **PWA offline** (service worker com cache do app shell) e **persistência
-  local** dos PGNs guardados (até 20 arquivos / ~2 MB, remoção automática
-  do mais antigo), autossalvamento das alterações e "Continuar última
-  leitura".
+  local** dos PGNs guardados (até 20 arquivos), autossalvamento das
+  alterações e "Continuar última leitura". Arquivo acima de ~500 mil
+  caracteres é guardado **só de leitura**: reabre e retoma a posição, mas
+  não guarda alterações.
+- **Sem teto de espaço chutado e sem apagar nada sozinho**: o app não
+  estima capacidade em bytes — tenta gravar, e o navegador diz se coube.
+  Quando não cabe, **nenhum PGN é apagado para abrir espaço**: o arquivo
+  abre e é lido normalmente, só não fica guardado, e o app avisa. Apagar é
+  sempre ato explícito de quem usa. O botão **"Espaço do aparelho"**, na
+  tela inicial, mede o teto real do navegador por tentativa e erro e
+  mostra quanto está ocupado e quanto ainda cabe.
+- **Dá para ler sem deixar rastro**: a caixa "Manter neste app os PGNs
+  que eu abrir" (ligada por padrão) desliga o armazenamento automático.
+- **Coleções grandes**: o arquivo é lido preguiçosamente (a árvore de
+  lances de cada partida só é montada ao abri-la), e a lista de escolha é
+  paginada de 50 em 50 com salto por número de página ou de partida — um
+  banco de 1,7 MB com 9.557 partidas abre em ~370 ms.
 
 ## Acessibilidade (herdada e validada no relógio)
 

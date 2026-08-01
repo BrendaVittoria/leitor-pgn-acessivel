@@ -2,7 +2,7 @@
 // handler do POST do share target (o ponto mais delicado do projeto).
 // Estratégia de shell: stale-while-revalidate, como no relógio.
 
-const CACHE = 'leitor-pgn-v9';
+const CACHE = 'leitor-pgn-v17';
 const CACHE_COMPARTILHADO = 'leitor-pgn-share';
 const LIMITE_COMPARTILHADO = 5 * 1024 * 1024;
 
@@ -101,12 +101,14 @@ self.addEventListener('fetch', (evento) => {
 async function tratarCompartilhamento(requisicao) {
   let texto = '';
   let recusado = false;
+  let nomeArquivo = '';
   try {
     const form = await requisicao.formData();
     const arquivo = form.get('pgn');
     if (arquivo && typeof arquivo.arrayBuffer === 'function' && arquivo.size) {
       texto = await lerArquivoCompartilhado(arquivo);
       recusado = texto === null;
+      nomeArquivo = arquivo.name || '';
     } else {
       texto = form.get('text') || form.get('url') || '';
     }
@@ -115,8 +117,14 @@ async function tratarCompartilhamento(requisicao) {
   }
   if (recusado) return Response.redirect('./?compartilhado=erro', 303);
   const cache = await caches.open(CACHE_COMPARTILHADO);
+  // O nome do arquivo vai junto num cabeçalho: numa coleção é ele que vira o
+  // rótulo na lista de guardados, e sem isso um livro inteiro entrava na lista
+  // com o nome dos dois jogadores da primeira partida.
   await cache.put('./__shared_pgn', new Response(texto, {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'X-Nome-Arquivo': encodeURIComponent(nomeArquivo || ''),
+    },
   }));
   return Response.redirect('./?compartilhado=1', 303);
 }

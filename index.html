@@ -48,9 +48,20 @@
 
       <section id="area-guardados" aria-labelledby="titulo-guardados">
         <h3 id="titulo-guardados" tabindex="-1">PGNs guardados</h3>
-        <p id="guardados-vazio" class="ajuda">Nenhum PGN guardado ainda. Os arquivos abertos ficam aqui para reabrir com um toque.</p>
+        <p id="guardados-vazio" class="ajuda">Nenhum PGN guardado ainda. Os arquivos abertos ficam nesta lista, dentro do app, para reabrir com um toque.</p>
         <ol id="lista-guardados"></ol>
-        <button type="button" id="btn-apagar-todos" hidden>Apagar todos</button>
+        <div class="acoes-linha">
+          <button type="button" id="btn-apagar-todos" hidden>Apagar todos</button>
+          <button type="button" id="btn-espaco">Espaço do aparelho</button>
+        </div>
+        <label for="chk-guardar" class="linha-checkbox">
+          <input type="checkbox" id="chk-guardar" checked>
+          <span>Manter neste app os PGNs abertos</span>
+        </label>
+        <p class="ajuda">Desligado, nada de novo é mantido: a leitura funciona
+          normalmente, mas o arquivo some ao fechar o app, e não há "Continuar
+          última leitura" nem autossalvamento das alterações. O que já está
+          guardado continua aí até você apagar.</p>
       </section>
     </section>
 
@@ -58,8 +69,31 @@
     <section id="tela-lista" hidden aria-labelledby="titulo-lista">
       <h2 id="titulo-lista">Escolha uma partida</h2>
       <p id="lista-descricao"></p>
+
+      <!-- Seletor de páginas: só aparece em coleções maiores que uma página.
+           Fica ANTES da lista de propósito — quem quer a partida 300 não pode
+           ser obrigado a atravessar 50 botões para achar como sair da página -->
+      <div id="paginacao-partidas" role="group" aria-label="Páginas de partidas" hidden>
+        <p id="paginacao-info" tabindex="-1"></p>
+        <div class="acoes-linha">
+          <button type="button" id="btn-pagina-anterior">Página anterior</button>
+          <button type="button" id="btn-pagina-proxima">Próxima página</button>
+        </div>
+        <div class="acoes-linha ir-para">
+          <label for="campo-pagina">Ir para a página</label>
+          <input type="number" id="campo-pagina" min="1" step="1" inputmode="numeric"
+                 autocomplete="off" enterkeyhint="go">
+          <button type="button" id="btn-ir-pagina" aria-label="Ir para a página digitada">Ir</button>
+        </div>
+        <div class="acoes-linha ir-para">
+          <label for="campo-partida">Ir para a partida</label>
+          <input type="number" id="campo-partida" min="1" step="1" inputmode="numeric"
+                 autocomplete="off" enterkeyhint="go">
+          <button type="button" id="btn-ir-partida" aria-label="Ir para a partida digitada">Ir</button>
+        </div>
+      </div>
+
       <ol id="lista-partidas"></ol>
-      <button type="button" id="btn-mais-partidas" hidden>Mostrar mais partidas</button>
       <button type="button" id="btn-voltar-inicial">Voltar ao início</button>
     </section>
 
@@ -78,9 +112,25 @@
         <dl id="detalhes-partida" hidden></dl>
       </div>
 
-      <!-- 2. Barra de navegação de lances -->
-      <div id="barra-navegacao" role="group" aria-label="Navegação de lances">
+      <!-- 2. Navegação entre as partidas do arquivo (só em coleção) -->
+      <div id="nav-partidas" role="group" aria-label="Navegação de partidas" hidden>
+        <p id="indicador-partida"></p>
         <div class="acoes-linha">
+          <button type="button" id="btn-partida-anterior">Partida anterior</button>
+          <button type="button" id="btn-partida-proxima">Próxima partida</button>
+        </div>
+        <!-- Volta à lista sem passar pelo painel de ações: reabrir uma coleção
+             cai direto na última partida lida, e sem este botão à vista a lista
+             de partidas ficava escondida atrás de um painel recolhido -->
+        <button type="button" id="btn-ver-lista">Ver lista de partidas</button>
+      </div>
+
+      <!-- 3. Barra de navegação de lances -->
+      <div id="barra-navegacao" role="group" aria-label="Navegação de lances">
+        <!-- Com o tabuleiro à vista, esta linha some: quem enxerga usa as
+             setas grandes coladas no tabuleiro, e ter os dois pares na mesma
+             tela é só duplicar o mesmo comando em dois lugares -->
+        <div class="acoes-linha" id="linha-lances-texto">
           <button type="button" id="btn-anterior">Lance anterior</button>
           <button type="button" id="btn-proximo" class="botao-principal">Próximo lance</button>
         </div>
@@ -94,7 +144,7 @@
         <p id="indicador-posicao" aria-live="off">Início da partida</p>
       </div>
 
-      <!-- 3. Tabuleiro opcional e entrada de lances: os dois modos de
+      <!-- 4. Tabuleiro opcional e entrada de lances: os dois modos de
            entrada convivem — digitar ou tocar, o que for mais cômodo -->
       <div class="acoes-linha">
         <button type="button" id="btn-tabuleiro" aria-expanded="false">Mostrar tabuleiro</button>
@@ -121,13 +171,19 @@
         </button>
       </div>
 
-      <!-- 4. Lista de lances (árvore) -->
+      <!-- Descrever posição colado na tela: sem tabuleiro, este botão é a
+           única forma de saber onde estão as peças, e ele não pode depender
+           de abrir o painel de ações. Com tabuleiro some daqui e volta ao
+           painel — quem está olhando as peças não precisa dele à mão -->
+      <button type="button" id="btn-descrever-fixo" hidden>Descrever posição</button>
+
+      <!-- 5. Lista de lances (árvore) -->
       <button type="button" id="btn-ver-lances" aria-expanded="false">Ver lances</button>
       <div id="area-lances" hidden>
         <div id="arvore-lances"></div>
       </div>
 
-      <!-- 5. Painel de ações -->
+      <!-- 6. Painel de ações -->
       <button type="button" id="btn-acoes" aria-expanded="false">Ver ações</button>
       <div id="painel-acoes" hidden>
         <div class="acoes-grade">
@@ -139,7 +195,6 @@
           <button type="button" id="btn-editar-cabecalho">Editar cabeçalho</button>
           <button type="button" id="btn-salvar-pgn">Salvar novo PGN</button>
           <button type="button" id="btn-restaurar" disabled>Restaurar original</button>
-          <button type="button" id="btn-trocar-partida" hidden>Trocar de partida</button>
           <button type="button" id="btn-outro-pgn">Abrir outro PGN</button>
         </div>
         <label for="chk-perguntar" class="linha-checkbox">
@@ -189,9 +244,27 @@
 
   <!-- Descrever posição -->
   <dialog id="dialogo-descrever" aria-labelledby="titulo-descrever">
-    <h2 id="titulo-descrever">Posição atual</h2>
+    <!-- O foco entra no título, não no primeiro botão: quem abriu quer ler a
+         posição, e os controles ficam depois dela, no fim do caminho -->
+    <h2 id="titulo-descrever" tabindex="-1">Posição atual</h2>
     <div id="blocos-descricao"></div>
-    <button type="button" id="btn-fechar-descrever">Fechar</button>
+    <div class="acoes-linha">
+      <button type="button" id="btn-formato-descricao"></button>
+      <button type="button" id="btn-fechar-descrever">Fechar</button>
+    </div>
+  </dialog>
+
+  <!-- Espaço do aparelho: mede o teto real de armazenamento deste navegador.
+       Serve para saber onde o app está pisando num aparelho que a gente não
+       tem à mão — a documentação dos navegadores se contradiz, então o número
+       que vale é o medido aqui. -->
+  <dialog id="dialogo-espaco" aria-labelledby="titulo-espaco">
+    <h2 id="titulo-espaco" tabindex="-1">Espaço do aparelho</h2>
+    <div id="blocos-espaco"></div>
+    <div class="acoes-linha">
+      <button type="button" id="btn-copiar-espaco" hidden>Copiar as medidas</button>
+      <button type="button" id="btn-fechar-espaco">Fechar</button>
+    </div>
   </dialog>
 
   <!-- Salvar novo PGN: o que salvar -->

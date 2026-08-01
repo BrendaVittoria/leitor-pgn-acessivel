@@ -62,6 +62,7 @@ label.linha-checkbox {
 }
 
 input[type="text"],
+input[type="number"],
 textarea {
   width: 100%;
   max-width: 32rem;
@@ -155,6 +156,26 @@ section { margin-top: 1.25rem; }
   text-align: left;
 }
 
+/* ---------------- Paginação da lista de partidas ---------------- */
+
+#paginacao-partidas {
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  margin: 0.6rem 0;
+  background: var(--fundo-painel);
+}
+#paginacao-info {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* Rótulo, campo e "Ir" na mesma linha: são um controle só. O rótulo perde a
+   margem de bloco que ele tem no resto do app para não desalinhar a linha. */
+#paginacao-partidas .ir-para { margin-top: 0.4rem; }
+#paginacao-partidas .ir-para label { margin: 0; }
+#paginacao-partidas input[type="number"] { width: 7rem; }
+
 /* Nome do arquivo e "Ações" na mesma linha; o menu aberto cai embaixo. */
 #lista-guardados li {
   display: flex;
@@ -206,6 +227,21 @@ section { margin-top: 1.25rem; }
   background: var(--fundo-painel);
 }
 #barra-navegacao .acoes-linha { margin-bottom: 0.3rem; }
+/* O display:flex de .acoes-linha ganharia do display:none do atributo hidden:
+   sem isto, a linha de lances continuaria na tela no modo com tabuleiro. */
+#barra-navegacao .acoes-linha[hidden] { display: none; }
+
+#nav-partidas {
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+  margin: 0.6rem 0;
+}
+#indicador-partida {
+  margin: 0 0 0.3rem;
+  color: var(--texto-suave);
+  font-variant-numeric: tabular-nums;
+}
 #indicador-posicao {
   margin: 0.3rem 0 0;
   color: var(--texto-suave);
@@ -294,6 +330,25 @@ section { margin-top: 1.25rem; }
   height: 2rem;
   fill: currentColor;
 }
+
+/* "Descrever posição" grudado no canto da tela enquanto o tabuleiro está
+   oculto: sem ele na tela, é este botão que responde "onde estão as peças?",
+   e a pergunta volta a cada lance — não pode custar uma ida ao painel. */
+#btn-descrever-fixo {
+  position: fixed;
+  right: 0.75rem;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  z-index: 5;
+  margin: 0;
+  background: var(--destaque);
+  color: #101418;
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.6);
+}
+/* Espaço no fim da tela para o botão fixo não pousar em cima do último
+   controle da página — só enquanto ele está lá. */
+#tela-leitura:has(#btn-descrever-fixo:not([hidden])) { padding-bottom: 4.5rem; }
 
 .tab-coordenadas {
   color: var(--texto-suave);

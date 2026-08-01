@@ -601,11 +601,10 @@ export class Leitura {
   _rotuloOpcao(no, ehPrincipal) {
     const base = descreverLanceFalado(no.move) + sufixoLeve(no.san);
     if (ehPrincipal) return `Linha principal: ${base}`;
+    // Só o primeiro lance da variante. Mostrar o lance seguinte junto ajudava
+    // a distinguir linhas parecidas, mas entrega a continuação antes da
+    // escolha — em PGN de puzzle, é entregar a resposta na pergunta.
     let texto = `Variante: ${base}`;
-    // Acrescenta o lance seguinte, quando ajudar a distinguir.
-    if (no.children[0]) {
-      texto += `, depois ${descreverLanceFalado(no.children[0].move)}`;
-    }
     const coment = comentarioFalado(no.commentBefore || no.comment);
     if (coment) texto += ` — ${coment}`;
     return texto;

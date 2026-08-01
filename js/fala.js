@@ -256,10 +256,46 @@ function juntarCasas(casas) {
   return `${inicio} e ${casas[casas.length - 1]}`;
 }
 
+// Teto de peças por linha da descrição. Acima disso a linha vira uma lista
+// comprida que o leitor de tela despeja de uma vez só — e quem ouve perde a
+// conta no meio. Com oito peões saem três linhas: 3, 3 e 2.
+const PECAS_POR_LINHA = 3;
+
+function fatiar(lista, tamanho = PECAS_POR_LINHA) {
+  const fatias = [];
+  for (let i = 0; i < lista.length; i += tamanho) {
+    fatias.push(lista.slice(i, i + tamanho));
+  }
+  return fatias;
+}
+
+// Os dois formatos da descrição. "Peças" agrupa por tipo de peça (é como se
+// fala de uma posição); "fileira" percorre o tabuleiro de cima para baixo,
+// da fileira 8 à 1, na mesma ordem em que o FEN é escrito.
+export const FORMATOS_DESCRICAO = [
+  { id: 'pecas', nome: 'por peça' },
+  { id: 'fen', nome: 'por fileira, como o FEN' },
+];
+
+export function nomeFormatoDescricao(id) {
+  const f = FORMATOS_DESCRICAO.find((x) => x.id === id);
+  return (f || FORMATOS_DESCRICAO[0]).nome;
+}
+
 // Constrói a lista de blocos de texto para o diálogo "Descrever posição".
 // Cada bloco é uma frase curta que o leitor de tela percorre no ritmo da
 // pessoa, em vez de um anúncio único e comprido.
-export function descreverPosicaoBlocos(chess) {
+export function descreverPosicaoBlocos(chess, formato = 'pecas') {
+  const blocos = formato === 'fen' ? blocosPorFileira(chess) : blocosPorPeca(chess);
+  blocos.push(...blocosDeContexto(chess));
+  return blocos;
+}
+
+// Formato "por peça": um bloco com a cor, e depois uma linha por tipo de
+// peça — quebrada em várias quando passa do teto de peças por linha. O rótulo
+// se repete nas continuações: sem ele, a segunda linha de peões seria uma
+// lista de casas soltas, sem dizer de que peça se está falando.
+function blocosPorPeca(chess) {
   const board = chess.board(); // matriz 8x8, [0]=linha 8
   const porCor = { w: {}, b: {} };
   for (let r = 0; r < 8; r++) {
@@ -275,21 +311,81 @@ export function descreverPosicaoBlocos(chess) {
 
   const blocos = [];
   for (const cor of ['w', 'b']) {
-    const partes = [];
+    blocos.push(cor === 'w' ? 'Brancas:' : 'Pretas:');
+    let alguma = false;
     for (const tipo of ORDEM_PECAS) {
       const lista = porCor[cor][tipo];
       if (!lista || !lista.length) continue;
+      alguma = true;
       lista.sort((a, b) => a.ord - b.ord);
-      const casas = lista.map((x) => x.nome);
-      const rotulo = casas.length === 1 ? SINGULARES[tipo] : PLURAIS[tipo];
-      partes.push(`${rotulo} ${juntarCasas(casas)}`);
+      const rotulo = lista.length === 1 ? SINGULARES[tipo] : PLURAIS[tipo];
+      // O rótulo sai uma vez só: as linhas seguintes do mesmo tipo são a
+      // continuação da lista de casas, e repetir "peões" três vezes é fala
+      // sobrando no meio do que interessa.
+      fatiar(lista.map((x) => x.nome)).forEach((fatia, i) => {
+        blocos.push(i === 0 ? `${rotulo} ${juntarCasas(fatia)}.` : `${juntarCasas(fatia)}.`);
+      });
     }
-    const titulo = cor === 'w' ? 'Brancas' : 'Pretas';
-    blocos.push(`${titulo}: ${partes.length ? partes.join('; ') : 'sem peças'}.`);
+    if (!alguma) blocos.push('Sem peças.');
   }
+  return blocos;
+}
 
-  // Vez e direitos de roque.
-  blocos.push(`Vez das ${nomeCor(chess.turn())}.`);
+// Formato "por fileira": da fileira 8 para a 1, cada uma lida da coluna anna
+// à hector — a mesma varredura do FEN. Quando as peças da linha são todas da
+// mesma cor, a cor sai uma vez no começo em vez de grudar em cada peça.
+function blocosPorFileira(chess) {
+  const board = chess.board();
+  const blocos = [];
+  for (let r = 0; r < 8; r++) {
+    const linha = 8 - r;
+    const pecas = [];
+    for (let c = 0; c < 8; c++) {
+      const casa = board[r][c];
+      if (!casa) continue;
+      pecas.push({
+        tipo: casa.type,
+        cor: casa.color,
+        nome: `${NOMES_COLUNAS['abcdefgh'[c]]} ${linha}`,
+      });
+    }
+    if (!pecas.length) {
+      blocos.push(`Fileira ${linha}: vazia.`);
+      continue;
+    }
+    // Nada de rótulo repetido: "Fileira 8" sai uma vez só, na primeira linha
+    // dela, e o nome da peça sai uma vez por corrida de peças iguais. As
+    // linhas seguintes são a continuação da mesma lista — quem ouve já sabe
+    // em que fileira está e de que peça se fala.
+    let corrida = null; // tipo cujo nome já foi dito e ainda vale
+    fatiar(pecas).forEach((fatia, i) => {
+      const umaCor = fatia.every((p) => p.cor === fatia[0].cor);
+      const umTipo = umaCor && fatia.every((p) => p.tipo === fatia[0].tipo);
+      let corpo;
+      if (umTipo && corrida === fatia[0].tipo) {
+        corpo = juntarCasas(fatia.map((p) => p.nome));
+      } else if (umTipo && fatia.length > 1) {
+        // Três peões seguidos viram "peões anna 7, bella 7 e cesar 7" em vez
+        // de repetir "peão" três vezes — é assim que se fala uma linha deles.
+        corpo = `${PLURAIS[fatia[0].tipo]} ${juntarCasas(fatia.map((p) => p.nome))}`;
+        corrida = fatia[0].tipo;
+      } else {
+        corpo = juntarCasas(fatia.map((p) => (umaCor
+          ? `${SINGULARES[p.tipo]} ${p.nome}`
+          : `${SINGULARES[p.tipo]} ${adjetivoCor(p.tipo, p.cor)} ${p.nome}`)));
+        corrida = null;
+      }
+      if (i > 0) blocos.push(`${corpo}.`);
+      else if (umaCor) blocos.push(`Fileira ${linha}, ${nomeCor(fatia[0].cor)}: ${corpo}.`);
+      else blocos.push(`Fileira ${linha}: ${corpo}.`);
+    });
+  }
+  return blocos;
+}
+
+// Vez, direitos de roque e xeque: iguais nos dois formatos.
+function blocosDeContexto(chess) {
+  const blocos = [`Vez das ${nomeCor(chess.turn())}.`];
   const roques = [];
   const direitos = obterRoques(chess);
   if (direitos.w.length) roques.push(`Brancas podem rocar: ${direitos.w.join(' e ')}`);

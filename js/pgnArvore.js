@@ -266,7 +266,61 @@ export function montarPartida({ tagsText, bodyText }) {
   };
 }
 
-// Separa e monta todas as partidas de um texto PGN. Retorna
+// ---------------- Partida preguiçosa ----------------
+
+// Montar a árvore custa caro: cada lance é reproduzido no chess.js para
+// validar e guardar o FEN. Num banco de 10 mil partidas isso são dezenas de
+// segundos de tela travada — e, das 10 mil, a pessoa vai abrir uma.
+//
+// Então a leitura do arquivo só faz o barato: separa os blocos e lê as tags,
+// que é tudo de que a lista de escolha precisa. A árvore de cada partida é
+// montada na primeira vez que alguém pede um campo que dependa dela — abrir a
+// partida, na prática. Quem consome não vê diferença: os campos estão todos
+// lá, com os mesmos nomes de sempre.
+const CAMPOS_DA_ARVORE = [
+  'fenInicial', 'ehSetup', 'raiz', 'truncada', 'ultimoLanceValido', 'temLances',
+];
+
+// Resultado declarado no fim do movetext, sem tokenizar a partida inteira.
+const RESULTADO_NO_FIM_RE = /(1-0|0-1|1\/2-1\/2|\*)\s*$/;
+
+function partidaPreguicosa(bloco) {
+  const tags = parseTags(bloco.tagsText);
+  const doCorpo = RESULTADO_NO_FIM_RE.exec(bloco.bodyText.trim());
+  const partida = {
+    tags,
+    resultado: (tags.Result && tags.Result !== '?')
+      ? tags.Result
+      : ((doCorpo && doCorpo[1]) || '*'),
+    // Texto do arquivo, do jeito que veio. Enquanto a árvore não é montada,
+    // ele É a partida: quem for regravar o arquivo pode copiá-lo em vez de
+    // gerar o PGN de novo (veja `intacta`).
+    textoBruto: `${bloco.tagsText.trim()}\n\n${bloco.bodyText.trim()}`,
+  };
+  let arvore = null;
+  const montar = () => {
+    if (!arvore) {
+      arvore = montarPartida(bloco);
+      // O cabeçalho já editado nesta sessão manda: montar a árvore não pode
+      // ressuscitar as tags do arquivo por cima das alterações da pessoa.
+      arvore.tags = partida.tags;
+    }
+    return arvore;
+  };
+  Object.defineProperty(partida, 'intacta', {
+    get: () => arvore === null,
+  });
+  for (const campo of CAMPOS_DA_ARVORE) {
+    Object.defineProperty(partida, campo, {
+      enumerable: true,
+      get: () => montar()[campo],
+      set: (valor) => { montar()[campo] = valor; },
+    });
+  }
+  return partida;
+}
+
+// Separa todas as partidas de um texto PGN. Retorna
 // { partidas: [...], ignoradas: N } — partidas sem nenhum lance mas com tags
 // contam como válidas (ex.: só cabeçalho); blocos totalmente vazios são
 // ignorados.
@@ -276,9 +330,12 @@ export function lerPgn(texto) {
   let ignoradas = 0;
   for (const bloco of blocos) {
     try {
-      const partida = montarPartida(bloco);
+      const partida = partidaPreguicosa(bloco);
+      // Verificação barata: um bloco sem tag nenhuma e sem nada que se pareça
+      // com lance é lixo. O resto (lance ilegal, linha truncada) só aparece
+      // ao montar a árvore, e lá já é tratado como partida truncada.
       const temTags = Object.keys(partida.tags).length > 0;
-      if (!partida.temLances && !temTags) {
+      if (!temTags && !/[a-hKQRBNO]/.test(bloco.bodyText)) {
         ignoradas++;
         continue;
       }
