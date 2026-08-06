@@ -21,13 +21,12 @@ python -m http.server 8100
 
 1. **Compartilhar com o app** (Web Share Target) — no Android, com o PWA
    instalado, compartilhe um `.pgn` (ou o texto do PGN) e escolha o app.
-2. **"Abrir com"** (File Handling API) — tocar num `.pgn` oferece o app.
-3. **Abrir arquivo** — seletor de arquivos (funciona em todo lugar).
-4. **Colar PGN ou FEN** — caixa de texto que aceita o PGN copiado ou um FEN
+2. **Abrir arquivo** — seletor de arquivos (funciona em todo lugar).
+3. **Colar PGN ou FEN** — caixa de texto que aceita o PGN copiado ou um FEN
    solto (aí abre como posição avulsa, para explorar ou jogar dali).
-5. **Control mais V na tela inicial** — abre o arquivo `.pgn` copiado no
+4. **Control mais V na tela inicial** — abre o arquivo `.pgn` copiado no
    gerenciador de arquivos, ou o texto (PGN ou FEN) que estiver na área de
-   transferência. Dentro das caixas de texto o atalho continua sendo delas.
+   transferência. Dentro das caixas de texto o atalho continua.
 
 Também dá para **Criar PGN** (partida nova ou a partir de um FEN) e jogar
 lances por digitação ou pelo tabuleiro.
@@ -71,8 +70,7 @@ lances por digitação ou pelo tabuleiro.
   sempre ato explícito de quem usa. O botão **"Espaço do aparelho"**, na
   tela inicial, mede o teto real do navegador por tentativa e erro e
   mostra quanto está ocupado e quanto ainda cabe.
-- **Dá para ler sem deixar rastro**: a caixa "Manter neste app os PGNs
-  que eu abrir" (ligada por padrão) desliga o armazenamento automático.
+- **Dá para ler sem deixar rastro**: a caixa "Manter neste app os PGNs abertos" (ligada por padrão) desliga o armazenamento automático.
 - **Coleções grandes**: o arquivo é lido preguiçosamente (a árvore de
   lances de cada partida só é montada ao abri-la), e a lista de escolha é
   paginada de 50 em 50 com salto por número de página ou de partida — um
@@ -117,9 +115,3 @@ icons/                Ícones do app e peças SVG (Cburnett)
 O `chess.js` valida e reproduz os lances; a **árvore de variantes** é
 mantida pelo parser próprio (`pgnArvore.js`), já que o `loadPgn` do chess.js
 não a preserva.
-
-## Publicação
-
-GitHub Pages, servindo a raiz do repositório. O script
-[`scripts/ativar-github-pages.ps1`](scripts/ativar-github-pages.ps1) ajuda
-a criar o repositório e ativar o Pages via `gh`.

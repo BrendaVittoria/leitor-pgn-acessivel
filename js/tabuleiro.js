@@ -56,12 +56,37 @@ export class TabuleiroAcessivel {
     this.botoes.get('e2').tabIndex = 0;
     grade.addEventListener('keydown', (e) => this._aoTecla(e));
 
+    // Coordenadas visuais (letras embaixo, números à esquerda). São apenas
+    // decorativas: quem usa leitor de tela já ouve o nome da casa no rótulo
+    // de cada botão, então repeti-las aqui só atrapalharia a leitura.
+    const fileiras = document.createElement('div');
+    fileiras.className = 'tab-fileiras';
+    fileiras.setAttribute('aria-hidden', 'true');
+    for (let linha = 8; linha >= 1; linha--) {
+      const rotulo = document.createElement('span');
+      rotulo.textContent = String(linha);
+      fileiras.appendChild(rotulo);
+    }
+
+    const colunas = document.createElement('div');
+    colunas.className = 'tab-colunas';
+    colunas.setAttribute('aria-hidden', 'true');
+    for (const letra of COLUNAS) {
+      const rotulo = document.createElement('span');
+      rotulo.textContent = letra;
+      colunas.appendChild(rotulo);
+    }
+
+    const quadro = document.createElement('div');
+    quadro.className = 'tab-quadro';
+    quadro.append(fileiras, grade, colunas);
+
     const legenda = document.createElement('p');
     legenda.className = 'tab-coordenadas';
     legenda.textContent = 'Usuários de NVDA: ative o modo de foco com Insert mais Espaço ao navegar pelo tabuleiro.';
 
     this.container.textContent = '';
-    this.container.appendChild(grade);
+    this.container.appendChild(quadro);
     this.container.appendChild(legenda);
     this.grade = grade;
   }
