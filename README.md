@@ -106,8 +106,9 @@ js/
   tabuleiro.js        Tabuleiro acessível (destaque de lance e variante)
   parser.js           Interpretação tolerante de lances digitados (do relógio)
   fala.js             Fala fonética: lances, casas, resultado, NAGs, posição
-  anunciador.js       Anunciador aria-live central + sons "toc"
+  anunciador.js       Anunciador aria-live central + sons de sounds/ (com "toc" de reserva)
   armazenamento.js    localStorage: guardados, última leitura, preferências
+sounds/               Amostras mp3: lance, captura, mate e empate (do relógio)
 vendor/chess.js       chess.js 1.x (motor de validação/reprodução)
 icons/                Ícones do app e peças SVG (Cburnett)
 ```

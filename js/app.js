@@ -2,14 +2,16 @@
 // (share target, file handlers, service worker). Sem framework, sem build.
 
 import { Chess, DEFAULT_POSITION, validateFen } from '../vendor/chess.js';
-import { iniciarAnunciador, anunciar, definirSom, acordarAudio } from './anunciador.js';
+import {
+  iniciarAnunciador, anunciar, definirSom, acordarAudio, precarregarSons,
+} from './anunciador.js';
 import {
   resultadoFalado, descreverPosicaoBlocos, nomeCasa, descreverLanceFalado,
   comentarioFalado, nomeFormatoDescricao,
 } from './fala.js';
 import { interpretarEntrada, resolverPromocao } from './parser.js';
 import {
-  lerPgn, montarPartida, caminhoPorIndices,
+  lerPgn, montarPartida, caminhoPorIndices, semInvisiveis,
 } from './pgnArvore.js';
 import {
   gerarPgnCompleto, gerarPgnLinha, nomeArquivoPgn, baixarPgn,
@@ -1158,7 +1160,9 @@ function aplicarCorrecao(san) {
 // [FEN "..."] e as formas curtas de 4 ou 5 campos (sem os contadores).
 // Devolve string vazia quando não sobra nada aproveitável.
 function normalizarFen(texto) {
-  let t = String(texto || '').replace(/[\s\u00a0\u2000-\u200b\ufeff]+/g, ' ').trim();
+  // Os invisíveis somem em vez de virar espaço: um LRM no meio da posição
+  // partiria o campo do tabuleiro em dois e o FEN deixaria de valer.
+  let t = semInvisiveis(texto).replace(/\s+/g, ' ').trim();
   // Só a tag sozinha vira FEN: num PGN inteiro ela vem acompanhada de lances,
   // que não podem ser jogados fora.
   const tag = t.match(/^\[\s*FEN\s+"([^"]+)"\s*\]$/i);
@@ -1269,21 +1273,52 @@ function temLeituraDeClipboard() {
   return Boolean(navigator.clipboard && navigator.clipboard.readText);
 }
 
-async function colarDaAreaDeTransferencia() {
-  let texto = '';
-  try {
-    texto = await navigator.clipboard.readText();
-  } catch {
-    // Permissão negada ou leitura bloqueada: erro específico + fallback.
-    anunciar('Não consegui ler a área de transferência. Cole o texto na caixa Colar PGN ou FEN.');
-    return;
-  }
-  texto = (texto || '').trim();
-  if (!texto) {
+// No Android, o Chrome pode abrir um diálogo nativo pedindo permissão para
+// ler a área de transferência — e a promessa do readText fica pendurada até
+// alguém responder. Quem usa leitor de tela nem sempre percebe esse diálogo:
+// o botão simplesmente emudece, e o app parece travado. Daí o prazo: passado
+// ele, a pessoa ouve o que fazer em vez de esperar no escuro. A leitura segue
+// viva — se a permissão vier depois, o PGN ainda abre.
+const PRAZO_CLIPBOARD = 6000;
+
+function usarTextoColado(texto) {
+  const limpo = (texto || '').trim();
+  if (!limpo) {
     anunciar('A área de transferência está vazia. Copie um PGN ou um FEN primeiro.');
     return;
   }
-  abrirTextoOuFen(texto);
+  abrirTextoOuFen(limpo);
+}
+
+async function colarDaAreaDeTransferencia() {
+  // Voltando do WhatsApp, a página pode ainda não ter o foco, e aí o Android
+  // recusa a leitura. Dizer isso é mais útil que um "não consegui" genérico.
+  if (!document.hasFocus()) {
+    anunciar('Toque uma vez na tela do app e tente de novo, ou cole o texto na caixa Colar PGN ou FEN.');
+    return;
+  }
+
+  let respondeu = false;
+  const leitura = navigator.clipboard.readText().then(
+    (texto) => { respondeu = true; return texto; },
+    (erro) => { respondeu = true; throw erro; },
+  );
+  const prazo = new Promise((resolve) => setTimeout(resolve, PRAZO_CLIPBOARD));
+
+  await Promise.race([leitura.catch(() => {}), prazo]);
+  if (!respondeu) {
+    anunciar('O navegador está pedindo permissão para ler a área de transferência. Procure o aviso na tela e confirme, ou cole o texto na caixa Colar PGN ou FEN.');
+    // Se a permissão for concedida depois, o PGN abre sem novo toque.
+    leitura.then(usarTextoColado, () => {});
+    return;
+  }
+
+  try {
+    usarTextoColado(await leitura);
+  } catch {
+    // Permissão negada ou leitura bloqueada: erro específico + fallback.
+    anunciar('Não consegui ler a área de transferência. Cole o texto na caixa Colar PGN ou FEN.');
+  }
 }
 
 // Decide sozinho entre FEN e PGN: o que sobra depois de normalizar valida
@@ -2039,6 +2074,14 @@ async function iniciar() {
   iniciarAnunciador($('anunciador'));
   aplicarPrefsIniciais();
   ligarEventos();
+
+  // O navegador só libera áudio depois de um gesto do usuário; o primeiro
+  // toque/tecla também é a deixa para baixar e decodificar as amostras, bem
+  // antes do primeiro lance.
+  const prepararAudio = () => precarregarSons();
+  document.addEventListener('pointerdown', prepararAudio, { once: true });
+  document.addEventListener('keydown', prepararAudio, { once: true });
+
   registrarServiceWorker();
   configurarFileHandler();
 

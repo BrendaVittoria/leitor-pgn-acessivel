@@ -5,7 +5,7 @@
 // entrar/sair de variantes é só crescer/truncar esse array.
 
 import { Chess } from '../vendor/chess.js';
-import { anunciar, somLance } from './anunciador.js';
+import { anunciar, somLance, somXequeMate, somEmpate } from './anunciador.js';
 import {
   descreverLanceFalado, fraseXeque, resultadoFalado, nagsFalados, nomeCor,
   nomePeca, comentarioFalado, VALOR_PECAS,
@@ -188,6 +188,7 @@ export class Leitura {
     }
     const captura = Boolean(no.move && no.move.captured);
     somLance(captura);
+    this._somDesfecho(no);
     if (emVar) {
       anunciar(`Fim da variante. ${this._faladoNo(no)}.`);
     } else {
@@ -266,6 +267,7 @@ export class Leitura {
     this.caminho = caminho;
     const captura = Boolean(no.move && no.move.captured);
     somLance(captura);
+    this._somDesfecho(no);
     if (this.ehRaiz) {
       anunciar('Início da partida.');
     } else if (this.emVariante()) {
@@ -356,6 +358,7 @@ export class Leitura {
     // Só a linha principal decide o placar: anotar variantes nunca pode
     // reescrever o resultado de uma partida importada.
     if (!this.emVariante()) this._atualizarResultado(chess, mv);
+    this._somDesfecho(no); // depois do placar: é ele que diz se foi empate
     this._marcarAlterada();
     this.aoMudar();
     return { ok: true };
@@ -475,6 +478,7 @@ export class Leitura {
     }
     anunciar(texto);
     somLance(Boolean(mv.captured));
+    this._somDesfecho(no);
     this.aoMudar();
     return { ok: true };
   }
@@ -547,6 +551,7 @@ export class Leitura {
     if (extras) texto += ` ${extras}`;
     anunciar(texto);
     somLance(Boolean(no.move && no.move.captured));
+    this._somDesfecho(no);
     this.aoMudar();
   }
 
@@ -564,6 +569,17 @@ export class Leitura {
   _faladoNo(no) {
     if (!no || !no.move) return '';
     return `${descreverLanceFalado(no.move)}${sufixoLeve(no.san)}`;
+  }
+
+  // Som do desfecho, logo depois do som do lance. Mate toca sempre que a
+  // leitura para num lance de mate, inclusive dentro de variante: o mate é um
+  // fato da posição. Empate só na ponta da linha principal, porque aí o
+  // desfecho vem do placar da partida — que a variante analisada não muda.
+  _somDesfecho(no) {
+    if (!no || !no.san) return;
+    if (no.san.endsWith('#')) { somXequeMate(); return; }
+    if (no.children.length === 0 && !this.emVariante()
+      && this.partida.resultado === '1/2-1/2') somEmpate();
   }
 
   _resultadoFrase() {

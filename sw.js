@@ -2,7 +2,7 @@
 // handler do POST do share target (o ponto mais delicado do projeto).
 // Estratégia de shell: stale-while-revalidate, como no relógio.
 
-const CACHE = 'leitor-pgn-v18';
+const CACHE = 'leitor-pgn-v20';
 const CACHE_COMPARTILHADO = 'leitor-pgn-share';
 const LIMITE_COMPARTILHADO = 5 * 1024 * 1024;
 
@@ -22,6 +22,10 @@ const ARQUIVOS = [
   './js/armazenamento.js',
   './js/temas.js',
   './vendor/chess.js',
+  './sounds/move.mp3',
+  './sounds/capture.mp3',
+  './sounds/checkmate.mp3',
+  './sounds/draw.mp3',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/pecas/wk.svg',

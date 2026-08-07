@@ -18,8 +18,19 @@ import { SUFIXO_PARA_NAG } from './fala.js';
 
 // ---------------- Separação de partidas ----------------
 
+// Caracteres de largura zero e marcas de direção: invisíveis na tela, mas o
+// \s do JavaScript não os reconhece como espaço. Um só deles entre duas tags
+// já rompe o bloco de cabeçalho, e a partida se despedaça em várias vazias.
+// O WhatsApp semeia LRM (U+200E) no texto copiado, então isso não é teoria.
+const INVISIVEIS_RE = /[\u200b-\u200f\u2060\ufeff]/g;
+
+// A mesma limpeza serve para um FEN solto colado do WhatsApp.
+export function semInvisiveis(texto) {
+  return String(texto || '').replace(INVISIVEIS_RE, '');
+}
+
 function limparTexto(texto) {
-  return texto.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  return semInvisiveis(texto).replace(/\r\n?/g, '\n');
 }
 
 // Uma partida = um bloco contíguo de tags [Chave "valor"] seguido do corpo
