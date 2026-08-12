@@ -362,5 +362,72 @@
   </dialog>
 
   <script type="module" src="js/app.js"></script>
+
+  <!-- Rede de segurança contra app morto. Se o app.js não chegar a rodar (um
+       módulo que não baixou, uma cópia offline defeituosa), a tela inicial
+       continua de pé, mas nenhum botão funciona — e quem está usando fica
+       tentando, sem entender. Este script é clássico e está embutido de
+       propósito: é o único que continua funcionando quando os arquivos .js
+       são o problema. Só age se um erro tiver acontecido E o app não tiver
+       avisado que terminou de iniciar, para nunca aparecer num app são. -->
+  <script>
+    (function () {
+      var falhou = false;
+      // captura na fase de captura: erro de carga de recurso (script/módulo
+      // que não veio) não sobe pela árvore de outro jeito
+      window.addEventListener('error', function () { falhou = true; }, true);
+      window.addEventListener('unhandledrejection', function () { falhou = true; });
+
+      function socorro() {
+        if (!falhou) return;
+        if (document.documentElement.dataset.appPronto) return;
+        if (document.querySelector('body > section[role="alert"]')) return;
+        var painel = document.createElement('section');
+        painel.setAttribute('role', 'alert');
+        painel.style.cssText = 'max-width:40rem;margin:1rem auto;padding:1rem;line-height:1.5';
+        var titulo = document.createElement('h2');
+        titulo.textContent = 'O aplicativo não conseguiu abrir';
+        titulo.tabIndex = -1;
+        var texto = document.createElement('p');
+        texto.textContent = 'A cópia guardada neste aparelho para uso offline está '
+          + 'incompleta. Conecte-se à internet e toque no botão abaixo para baixar o '
+          + 'aplicativo de novo. Seus PGNs guardados serão mantidos.';
+        var botao = document.createElement('button');
+        botao.type = 'button';
+        botao.textContent = 'Baixar o aplicativo de novo e recarregar';
+        botao.style.cssText = 'font-size:1rem;padding:0.75rem 1rem;margin:0.5rem 0';
+        botao.onclick = function () {
+          botao.disabled = true;
+          botao.textContent = 'Baixando…';
+          var fim = function () { location.reload(); };
+          var limpezas = [];
+          if (window.caches) {
+            limpezas.push(caches.keys().then(function (chaves) {
+              // só os caches deste app (o relógio divide o mesmo endereço), e
+              // nunca o do compartilhamento: pode haver um PGN esperando ali
+              return Promise.all(chaves.filter(function (c) {
+                return c.indexOf('leitor-pgn-') === 0 && c !== 'leitor-pgn-share';
+              }).map(function (c) { return caches.delete(c); }));
+            }));
+          }
+          if (navigator.serviceWorker) {
+            limpezas.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs.filter(function (r) {
+                return location.href.indexOf(r.scope) === 0;
+              }).map(function (r) { return r.unregister(); }));
+            }));
+          }
+          Promise.all(limpezas).then(fim, fim);
+        };
+        painel.appendChild(titulo);
+        painel.appendChild(texto);
+        painel.appendChild(botao);
+        document.body.insertBefore(painel, document.body.firstChild);
+        titulo.focus();
+      }
+      // 4s dá folga para o carregamento dos módulos em conexão lenta
+      window.addEventListener('load', function () { setTimeout(socorro, 4000); });
+    }());
+  </script>
 </body>
 </html>

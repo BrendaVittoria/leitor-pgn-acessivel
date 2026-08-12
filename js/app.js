@@ -2035,9 +2035,88 @@ function configurarFileHandler() {
 }
 
 function registrarServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => { /* offline não disponível */ });
+  if (!('serviceWorker' in navigator)) return;
+  // updateViaCache: 'none' impede que o próprio sw.js venha do cache HTTP, e o
+  // update() a cada abertura faz o app buscar uma versão nova assim que ela é
+  // publicada, em vez de esperar a checagem automática do navegador
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+    .then((registro) => registro.update())
+    .catch(() => { /* offline não disponível */ });
+}
+
+// Descarta o app guardado no aparelho (cache + service worker) e recarrega da
+// rede. É a saída para quem ficou com uma cópia offline defeituosa ou sem
+// cópia nenhuma.
+async function reinstalarApp(apagarDados) {
+  if (apagarDados) {
+    try { localStorage.clear(); } catch { /* modo privado bloqueia */ }
   }
+  try {
+    if ('caches' in window) {
+      const chaves = await caches.keys();
+      // só os caches deste app (o relógio divide o mesmo endereço), e nunca o
+      // do compartilhamento: pode haver um PGN recém-recebido esperando ali
+      await Promise.all(chaves
+        .filter((chave) => chave.startsWith('leitor-pgn-') && chave !== 'leitor-pgn-share')
+        .map((chave) => caches.delete(chave)));
+    }
+  } catch { /* segue mesmo assim: o unregister abaixo já ajuda */ }
+  try {
+    const registros = await navigator.serviceWorker.getRegistrations();
+    // idem: desregistra só o SW deste app, não o do relógio
+    await Promise.all(registros
+      .filter((registro) => location.href.startsWith(registro.scope))
+      .map((registro) => registro.unregister()));
+  } catch { /* idem */ }
+  location.reload();
+}
+
+// Se a inicialização quebrar, a tela inicial fica de pé mas sem nenhum botão
+// funcionando — o usuário fica tentando usar um app morto, sem entender. Este
+// painel é montado inteiramente em JS, sem depender de elemento do index.html
+// nem de classe do styles.css, porque são justamente esses arquivos que podem
+// estar com problema.
+function mostrarFalhaDeInicializacao(erro) {
+  const painel = document.createElement('section');
+  painel.setAttribute('role', 'alert');
+  painel.style.cssText = 'max-width:40rem;margin:1rem auto;padding:1rem;line-height:1.5';
+
+  const titulo = document.createElement('h2');
+  titulo.textContent = 'O aplicativo não conseguiu abrir';
+  titulo.tabIndex = -1;
+
+  const texto = document.createElement('p');
+  texto.textContent = 'Provavelmente a cópia guardada neste aparelho para uso '
+    + 'offline está incompleta. Baixar o aplicativo de novo costuma resolver. '
+    + 'Seus PGNs guardados serão mantidos.';
+
+  const botao = document.createElement('button');
+  botao.type = 'button';
+  botao.textContent = 'Baixar o aplicativo de novo e recarregar';
+  botao.style.cssText = 'font-size:1rem;padding:0.75rem 1rem;margin:0.5rem 0';
+  botao.addEventListener('click', () => {
+    botao.disabled = true;
+    botao.textContent = 'Baixando…';
+    reinstalarApp(false);
+  });
+
+  const apagar = document.createElement('button');
+  apagar.type = 'button';
+  apagar.textContent = 'Se não resolver: apagar também os dados salvos';
+  apagar.style.cssText = 'font-size:0.9rem;padding:0.5rem;display:block;margin-top:0.5rem';
+  apagar.addEventListener('click', () => {
+    const certeza = confirm('Isso apaga os PGNs guardados e as preferências deste '
+      + 'aparelho. Continuar?');
+    if (certeza) reinstalarApp(true);
+  });
+
+  const detalhe = document.createElement('p');
+  detalhe.style.cssText = 'font-size:0.85rem;opacity:0.8;margin-top:1rem';
+  detalhe.textContent = `Detalhe técnico: ${(erro && erro.message) || erro}`;
+
+  painel.append(titulo, texto, botao, apagar, detalhe);
+  document.body.insertBefore(painel, document.body.firstChild);
+  titulo.focus();
 }
 
 // ---------------- Inicialização ----------------
@@ -2071,6 +2150,10 @@ function ajustarFiltroDeArquivo() {
 }
 
 async function iniciar() {
+  // registrado antes de tudo: mesmo que a inicialização quebre, o service
+  // worker fica instalado e busca a correção na próxima abertura com internet
+  registrarServiceWorker();
+
   iniciarAnunciador($('anunciador'));
   aplicarPrefsIniciais();
   ligarEventos();
@@ -2082,7 +2165,6 @@ async function iniciar() {
   document.addEventListener('pointerdown', prepararAudio, { once: true });
   document.addEventListener('keydown', prepararAudio, { once: true });
 
-  registrarServiceWorker();
   configurarFileHandler();
 
   const veioDeCompartilhamento = await verificarCompartilhamento();
@@ -2091,6 +2173,10 @@ async function iniciar() {
     renderGuardados();
     configurarContinuar();
   }
+
+  // marca que a inicialização foi até o fim; a rede de segurança embutida no
+  // index.html usa isso para saber que não precisa entrar em ação
+  document.documentElement.dataset.appPronto = '1';
 }
 
-iniciar();
+iniciar().catch(mostrarFalhaDeInicializacao);

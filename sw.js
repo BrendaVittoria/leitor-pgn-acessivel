@@ -1,9 +1,22 @@
 // Service worker: cache do app shell (offline desde a segunda visita) + o
 // handler do POST do share target (o ponto mais delicado do projeto).
-// Estratégia de shell: stale-while-revalidate, como no relógio.
+//
+// Estratégia de shell: "snapshot atômico", como no relógio. O cache guarda
+// sempre um conjunto coerente de arquivos, baixado de uma vez só: ou vale o
+// conjunto antigo inteiro, ou o novo inteiro, nunca uma mistura. A estratégia
+// anterior renovava arquivo por arquivo, e numa conexão instável dava para o
+// aparelho ficar com index.html novo e módulos antigos — o app quebrava na
+// abertura e continuava quebrado, porque o cache defeituoso persistia.
+//
+// O cache do compartilhamento é separado e nunca é tocado por essa troca: ele
+// pode conter um PGN recém-recebido que ainda não chegou à página.
+//
+// AO PUBLICAR UMA MUDANÇA: incremente VERSAO abaixo.
 
-const CACHE = 'leitor-pgn-v21';
-const CACHE_COMPARTILHADO = 'leitor-pgn-share';
+const VERSAO = 22;
+const PREFIXO = 'leitor-pgn-';
+const CACHE = `${PREFIXO}v${VERSAO}`;
+const CACHE_COMPARTILHADO = `${PREFIXO}share`;
 const LIMITE_COMPARTILHADO = 5 * 1024 * 1024;
 
 const ARQUIVOS = [
@@ -42,11 +55,47 @@ const ARQUIVOS = [
   './icons/pecas/bp.svg',
 ];
 
+// no-store ignora o cache HTTP do navegador: garante que o snapshot é o que
+// está publicado agora, e não uma cópia guardada pelo próprio navegador
+const daRede = (url) => fetch(new Request(url, { cache: 'no-store' }));
+
+// Baixa todos os arquivos e só grava depois que TODOS chegaram inteiros. Se a
+// conexão falhar no meio (celular em rede instável), nada é gravado e o cache
+// anterior continua valendo — quebrado pela metade, nunca.
+async function gravarSnapshot(cache) {
+  const respostas = await Promise.all(ARQUIVOS.map(daRede));
+  const falhou = respostas.find((resposta) => !resposta || !resposta.ok);
+  if (falhou) throw new Error(`arquivo não baixado: ${falhou && falhou.url}`);
+  await Promise.all(respostas.map((resposta, i) => cache.put(ARQUIVOS[i], resposta)));
+}
+
+// Confere se o index.html publicado mudou em relação ao do cache. É o gatilho
+// reserva: se uma publicação esquecer de incrementar VERSAO, o app se conserta
+// sozinho na próxima abertura com internet.
+let jaConferiu = false;
+async function conferirAtualizacao() {
+  if (jaConferiu) return;
+  jaConferiu = true;
+  try {
+    const cache = await caches.open(CACHE);
+    const emCache = await cache.match('./index.html');
+    const publicado = await daRede('./index.html');
+    if (!publicado || !publicado.ok) return;
+    if (emCache && (await emCache.text()) === (await publicado.clone().text())) return;
+    await gravarSnapshot(cache);
+  } catch {
+    // sem internet ou download incompleto: segue com o snapshot atual
+  }
+}
+
 self.addEventListener('install', (evento) => {
   evento.waitUntil(
     caches.open(CACHE)
-      .then((cache) => cache.addAll(ARQUIVOS.map((url) => new Request(url, { cache: 'reload' }))))
-      .then(() => self.skipWaiting()),
+      .then(gravarSnapshot)
+      .then(() => {
+        jaConferiu = true; // acabou de baixar tudo; não precisa conferir de novo
+        return self.skipWaiting();
+      }),
   );
 });
 
@@ -54,8 +103,16 @@ self.addEventListener('activate', (evento) => {
   evento.waitUntil(
     caches.keys()
       .then((chaves) => Promise.all(
+        // Só os caches DESTE app, nunca "todos menos o meu". O relógio de
+        // xadrez mora no mesmo endereço (brendavittoria.github.io, outra
+        // pasta) e o armazenamento de caches é compartilhado por endereço,
+        // não por pasta: um app enxerga e pode apagar o cache do outro.
+        // Apagar tudo que não fosse meu deixava o relógio sem cópia offline a
+        // cada publicação — e ele parava de abrir no primeiro momento sem
+        // internet boa.
         chaves
-          .filter((chave) => chave !== CACHE && chave !== CACHE_COMPARTILHADO)
+          .filter((chave) => chave.startsWith(PREFIXO)
+            && chave !== CACHE && chave !== CACHE_COMPARTILHADO)
           .map((chave) => caches.delete(chave)),
       ))
       .then(() => self.clients.claim()),
@@ -80,23 +137,26 @@ self.addEventListener('fetch', (evento) => {
 
   if (requisicao.method !== 'GET' || !requisicao.url.startsWith(self.location.origin)) return;
 
-  const chave = requisicao.mode === 'navigate' ? './index.html' : requisicao;
-  const renovar = caches.open(CACHE).then(async (cache) => {
-    try {
-      const daRede = requisicao.mode === 'navigate'
-        ? await fetch('./index.html', { cache: 'no-cache' })
-        : await fetch(requisicao, { cache: 'no-cache' });
-      if (daRede && daRede.ok) await cache.put(chave, daRede.clone());
-      return daRede;
-    } catch {
-      return null;
-    }
-  });
+  // navegações são sempre servidas pelo shell (./index.html)
+  const navegacao = requisicao.mode === 'navigate';
+  const chave = navegacao ? './index.html' : requisicao;
 
   evento.respondWith(
-    caches.match(chave).then((emCache) => emCache || renovar.then((r) => r || Response.error())),
+    // busca dentro do MEU cache: caches.match() varre todos os caches do
+    // endereço, inclusive os do relógio e versões antigas minhas
+    caches.open(CACHE).then((cache) => cache.match(chave)).then(async (emCache) => {
+      if (emCache) return emCache;
+      // fora do snapshot (arquivo novo, recurso externo ao shell): tenta a rede
+      try {
+        return await fetch(requisicao);
+      } catch {
+        return Response.error();
+      }
+    }),
   );
-  evento.waitUntil(renovar);
+
+  // a conferência roda em segundo plano, sem atrasar a resposta ao usuário
+  if (navegacao) evento.waitUntil(conferirAtualizacao());
 });
 
 // Recebe o POST do compartilhamento, extrai o PGN (arquivo ou texto puro),

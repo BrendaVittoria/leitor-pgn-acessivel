@@ -91,6 +91,22 @@ lances por digitação ou pelo tabuleiro.
 > Testar separadamente com **NVDA**, **VoiceOver** e **TalkBack** — são
 > três leitores diferentes.
 
+## Ao publicar uma mudança
+
+**Incremente `VERSAO` no topo do `sw.js`.** O service worker guarda os arquivos
+do app como um snapshot único e coerente: ou o cache inteiro é da versão
+antiga, ou é inteiro da nova. Trocar o número é o que dispara o download do
+snapshot novo nos aparelhos já instalados. Se esquecer, há uma rede de
+segurança — o service worker compara o `index.html` publicado com o do cache —,
+mas ela não cobre uma publicação que mexa só nos `.js`.
+
+**Nunca apague "todos os caches menos o meu".** Este app e o
+[relógio de xadrez](https://github.com/BrendaVittoria/relogio-xadrez-acessivel)
+moram no mesmo endereço (`brendavittoria.github.io`, pastas diferentes), e o
+armazenamento de caches é compartilhado por endereço, não por pasta: cada um
+enxerga e pode apagar o cache do outro. Filtre sempre pelo prefixo
+`leitor-pgn-`.
+
 ## Estrutura
 
 ```
