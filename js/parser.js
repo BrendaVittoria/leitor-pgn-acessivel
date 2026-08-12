@@ -39,6 +39,56 @@ function normalizarPromocao(texto) {
   return null;
 }
 
+// Casa a entrada com os lances legais por partes (peça, desambiguação de
+// origem, destino) em vez de comparar o texto do SAN. Isso aceita a
+// desambiguação que o SAN dispensa (`Rfc8` quando `Rc8` já basta), a origem
+// completa (`Ne1f3`, `Rf8c8`) e a forma longa só com as casas (`e2e4`,
+// `b1c3`, `e7e8q`), com ou sem `x`/`-` no meio e em qualquer caixa.
+function casarPorPartes(texto, legais) {
+  const alvo = texto.toLowerCase();
+  const lances = new Map(); // san -> lance
+  const promocoes = new Map(); // san base (sem "=peça") -> lance
+
+  const registrar = (lance, letraPromocao) => {
+    if (!lance.promotion) {
+      // peça indicada no fim só faz sentido em promoção
+      if (!letraPromocao) lances.set(lance.san, lance);
+      return;
+    }
+    // Promoção: sem a peça escolhida, vira pergunta em vez de lance.
+    if (!letraPromocao) {
+      promocoes.set(sanLimpo(lance.san).replace(/=[QRBN]$/, ''), lance);
+      return;
+    }
+    if (lance.promotion === letraPromocao) lances.set(lance.san, lance);
+  };
+
+  // Peça: letra, coluna e/ou linha de origem (opcionais), destino.
+  const peca = alvo.match(/^([nbrqk])([a-h]?)([1-8]?)[x-]?([a-h][1-8])$/);
+  if (peca) {
+    const [, letra, coluna, linha, destino] = peca;
+    for (const lance of legais) {
+      if (lance.piece !== letra || lance.to !== destino) continue;
+      if (coluna && lance.from[0] !== coluna) continue;
+      if (linha && lance.from[1] !== linha) continue;
+      registrar(lance, null);
+    }
+  }
+
+  // Forma longa sem a letra da peça: casa de origem, casa de destino e
+  // promoção opcional (e2e4, b1c3, e1g1 para o roque, e7e8q).
+  const longa = alvo.match(/^([a-h][1-8])[x-]?([a-h][1-8])=?([qrbn])?$/);
+  if (longa) {
+    const [, origem, destino, letraPromocao] = longa;
+    for (const lance of legais) {
+      if (lance.from !== origem || lance.to !== destino) continue;
+      registrar(lance, letraPromocao || null);
+    }
+  }
+
+  return { lances, promocoes };
+}
+
 // Gera as variantes de caixa (maiúscula/minúscula) de uma entrada.
 function variantesDeCaixa(texto) {
   const variantes = new Set();
@@ -111,6 +161,11 @@ export function interpretarEntrada(entrada, chess) {
     if (lance) encontrados.set(lance.san, lance);
   }
 
+  // 4. Casamento por partes: desambiguação dispensável (Rfc8, N1f3), origem
+  // completa (Ne1f3, Rf8c8) e forma longa de peão (e2e4, e7e8q).
+  const porPartes = casarPorPartes(texto, legais);
+  for (const lance of porPartes.lances.values()) encontrados.set(lance.san, lance);
+
   if (encontrados.size === 1) {
     const lance = [...encontrados.values()][0];
     return { tipo: 'lance', san: lance.san, lance, inferido: true };
@@ -126,8 +181,9 @@ export function interpretarEntrada(entrada, chess) {
     };
   }
 
-  // 4. Nada legal encontrado: pode ser promoção sem a peça (ex.: "e8" sozinho)
-  const promocoes = new Map();
+  // 5. Nada legal encontrado: pode ser promoção sem a peça (ex.: "e8" sozinho,
+  // ou "e7e8" na forma longa)
+  const promocoes = new Map(porPartes.promocoes);
   for (const candidato of candidatos) {
     const lance = porSan.get(`${candidato}=Q`);
     if (lance && lance.promotion) promocoes.set(candidato, lance);
@@ -135,25 +191,6 @@ export function interpretarEntrada(entrada, chess) {
   if (promocoes.size >= 1) {
     const [baseSan, lanceBase] = [...promocoes.entries()][0];
     return { tipo: 'promocao', baseSan, lanceBase };
-  }
-
-  // 5. Lance de peça sem desambiguação suficiente (ex.: Nf3 com dois cavalos
-  // que alcançam f3): oferecer as opções em vez de só dizer "ilegal".
-  for (const variante of variantesDeCaixa(texto)) {
-    const m = variante.match(/^([NBRQK])x?([a-h][1-8])$/);
-    if (!m) continue;
-    const possiveis = legais.filter(
-      (lance) => lance.piece === m[1].toLowerCase() && lance.to === m[2],
-    );
-    if (possiveis.length >= 2) {
-      return {
-        tipo: 'ambiguo',
-        opcoes: possiveis.map((lance) => ({
-          san: lance.san,
-          descricao: descreverLance(lance, true),
-        })),
-      };
-    }
   }
 
   // 6. Inválido — mensagem específica
