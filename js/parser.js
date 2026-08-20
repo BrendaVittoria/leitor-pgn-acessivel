@@ -2,7 +2,9 @@
 // sem "x", promoção sem "=", desambiguação em minúscula e trata a
 // ambiguidade real da letra "b" (peão da coluna bella × bispo).
 
-import { descreverLance } from './fala.js';
+import {
+  artigoIndefinido, descreverLance, nomeCasa, nomePeca,
+} from './fala.js';
 
 function sanLimpo(san) {
   return san.replace(/[+#?!]+$/, '');
@@ -40,14 +42,16 @@ function normalizarPromocao(texto) {
 }
 
 // Casa a entrada com os lances legais por partes (peça, desambiguação de
-// origem, destino) em vez de comparar o texto do SAN. Isso aceita a
-// desambiguação que o SAN dispensa (`Rfc8` quando `Rc8` já basta), a origem
-// completa (`Ne1f3`, `Rf8c8`) e a forma longa só com as casas (`e2e4`,
-// `b1c3`, `e7e8q`), com ou sem `x`/`-` no meio e em qualquer caixa.
+// origem, destino) em vez de comparar o texto do SAN. Isso aceita a origem
+// completa (`Ne1f3`, `Rf8c8`), a desambiguação por coluna ou linha quando há
+// mesmo ambiguidade (`Ndf3` com dois cavalos indo a felix 3) e a forma longa
+// só com as casas (`e2e4`, `b1c3`, `e7e8q`), com ou sem `x`/`-` no meio e em
+// qualquer caixa.
 function casarPorPartes(texto, legais) {
   const alvo = texto.toLowerCase();
   const lances = new Map(); // san -> lance
   const promocoes = new Map(); // san base (sem "=peça") -> lance
+  let desnecessaria = null; // desambiguação parcial numa posição sem ambiguidade
 
   const registrar = (lance, letraPromocao) => {
     if (!lance.promotion) {
@@ -67,11 +71,24 @@ function casarPorPartes(texto, legais) {
   const peca = alvo.match(/^([nbrqk])([a-h]?)([1-8]?)[x-]?([a-h][1-8])$/);
   if (peca) {
     const [, letra, coluna, linha, destino] = peca;
-    for (const lance of legais) {
-      if (lance.piece !== letra || lance.to !== destino) continue;
-      if (coluna && lance.from[0] !== coluna) continue;
-      if (linha && lance.from[1] !== linha) continue;
-      registrar(lance, null);
+    const aoDestino = legais.filter((l) => l.piece === letra && l.to === destino);
+    // Coluna ou linha sozinha é desambiguação, e desambiguação só existe onde
+    // há duas peças disputando o destino. Com uma só, `Ndf3` não é lance: é
+    // `Nf3` com uma letra a mais, e engolir isso esconde o engano de quem
+    // digita. A casa de origem inteira (`Nd2f3`) não desambigua nada — é a
+    // forma longa do lance, e vale sempre.
+    const parcial = Boolean(coluna) !== Boolean(linha);
+    if (!parcial || aoDestino.length > 1) {
+      for (const lance of aoDestino) {
+        if (coluna && lance.from[0] !== coluna) continue;
+        if (linha && lance.from[1] !== linha) continue;
+        registrar(lance, null);
+      }
+    } else if (aoDestino.length === 1
+      && aoDestino[0].from[coluna ? 0 : 1] === (coluna || linha)) {
+      // A letra até bate com a origem: é desambiguação sobrando, não engano de
+      // peça. Guardada para a mensagem dizer o que sobra.
+      desnecessaria = { lance: aoDestino[0], porColuna: Boolean(coluna) };
     }
   }
 
@@ -86,7 +103,7 @@ function casarPorPartes(texto, legais) {
     }
   }
 
-  return { lances, promocoes };
+  return { lances, promocoes, desnecessaria };
 }
 
 // Gera as variantes de caixa (maiúscula/minúscula) de uma entrada.
@@ -161,8 +178,8 @@ export function interpretarEntrada(entrada, chess) {
     if (lance) encontrados.set(lance.san, lance);
   }
 
-  // 4. Casamento por partes: desambiguação dispensável (Rfc8, N1f3), origem
-  // completa (Ne1f3, Rf8c8) e forma longa de peão (e2e4, e7e8q).
+  // 4. Casamento por partes: desambiguação onde há ambiguidade (Ndf3, N1f3),
+  // origem completa (Ne1f3, Rf8c8) e forma longa de peão (e2e4, e7e8q).
   const porPartes = casarPorPartes(texto, legais);
   for (const lance of porPartes.lances.values()) encontrados.set(lance.san, lance);
 
@@ -193,7 +210,18 @@ export function interpretarEntrada(entrada, chess) {
     return { tipo: 'promocao', baseSan, lanceBase };
   }
 
-  // 6. Inválido — mensagem específica
+  // 6. Desambiguação onde não havia ambiguidade: o lance existe, mas não com
+  // essa letra a mais. Dizer só "ilegal" mandaria procurar erro na posição.
+  if (porPartes.desnecessaria) {
+    const { lance, porColuna } = porPartes.desnecessaria;
+    const peca = `${artigoIndefinido(lance.piece)} ${nomePeca(lance.piece)}`;
+    return {
+      tipo: 'invalido',
+      mensagem: `${porColuna ? 'A coluna' : 'A linha'} de origem só entra quando há ambiguidade, e aqui só ${peca} chega a ${nomeCasa(lance.to)}. Digite o lance sem ela, ou com a casa de origem inteira.`,
+    };
+  }
+
+  // 7. Inválido — mensagem específica
   const pareceLance = /^[a-hnbrqkoO0](?:[a-h1-8xX=oO0-]|[nbrqk])*$/i.test(texto);
   return {
     tipo: 'invalido',

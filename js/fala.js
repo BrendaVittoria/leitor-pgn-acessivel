@@ -40,6 +40,10 @@ export function adjetivoCor(letraPeca, cor) {
   return feminino ? 'preta' : 'preto';
 }
 
+export function artigoIndefinido(letraPeca) {
+  return PECAS[letraPeca.toLowerCase()].artigo === 'a' ? 'uma' : 'um';
+}
+
 // Descreve um lance verboso do chess.js em português por extenso.
 // Com `comOrigem`, inclui de onde a peça vem — usado nas perguntas de
 // desambiguação (ex.: "peão de bella toma em cesar 3").
