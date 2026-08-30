@@ -1,6 +1,7 @@
 // Parser tolerante de lances: aceita variações de roque, captura de peão
-// sem "x", promoção sem "=", desambiguação em minúscula e trata a
-// ambiguidade real da letra "b" (peão da coluna bella × bispo).
+// sem "x", a peça capturada anotada depois do "x", promoção sem "=",
+// desambiguação em minúscula e trata a ambiguidade real da letra "b"
+// (peão da coluna bella × bispo).
 
 import {
   artigoIndefinido, descreverLance, nomeCasa, nomePeca,
@@ -8,6 +9,21 @@ import {
 
 function sanLimpo(san) {
   return san.replace(/[+#?!]+$/, '');
+}
+
+// Alguns arquivos anotam a peça capturada logo depois do "x": exNd4, cxBd5,
+// RxQe1. Não é SAN, e quem lê o lance letra a letra entende a peça errada —
+// em "exNd4" o "N" vira o cavalo QUE SE MOVE, o lance fica ilegal e a linha
+// inteira se perde. Como a peça capturada é dedutível da posição, a letra é
+// só ruído: tirá-la devolve o SAN.
+//
+// Seguro por construção: em SAN válido o "x" é seguido direto pela casa de
+// destino, ou seja, letra e DÍGITO. O recorte abaixo exige letra de peça mais
+// letra e dígito — três caracteres —, então nenhum lance bem escrito casa.
+const PECA_CAPTURADA_RE = /^([kqrbn]?[a-h]?[1-8]?x)[kqrbnp]([a-h][1-8])/i;
+
+export function semPecaCapturada(san) {
+  return san.replace(PECA_CAPTURADA_RE, '$1$2');
 }
 
 // Normaliza roque: remove hífens; se sobrarem só o/O/0, é roque.
@@ -144,7 +160,7 @@ function expandirVariante(variante) {
  *   | {tipo:'invalido', mensagem:string}}
  */
 export function interpretarEntrada(entrada, chess) {
-  const texto = entrada.trim().replace(/[+#?!]+$/, '');
+  const texto = semPecaCapturada(entrada.trim().replace(/[+#?!]+$/, ''));
   if (!texto) return { tipo: 'invalido', mensagem: 'Entrada vazia.' };
 
   const legais = chess.moves({ verbose: true });

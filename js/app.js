@@ -7,7 +7,7 @@ import {
 } from './anunciador.js';
 import {
   resultadoFalado, descreverPosicaoBlocos, nomeCasa, descreverLanceFalado,
-  comentarioFalado, nomeFormatoDescricao,
+  comentarioFalado, nomeFormatoDescricao, nomeCor,
 } from './fala.js';
 import { interpretarEntrada, resolverPromocao } from './parser.js';
 import {
@@ -314,6 +314,19 @@ function numeroDoCampo(id) {
   return parseInt($(id).value, 10);
 }
 
+// Lance ilegal no arquivo poda o ramo: a partida simplesmente acaba antes do
+// fim. Sem este aviso, quem ouve não tem como distinguir isso de uma partida
+// curta — segue navegando e os lances acabam sem explicação.
+function avisoDeTruncamento(partida) {
+  if (!partida.truncada) return '';
+  const erro = partida.primeiroErro;
+  if (!erro) return 'Atenção: o arquivo tem lances que não consegui ler, e a leitura foi cortada onde eles aparecem. O texto do arquivo continua completo; se você alterar algo nesta partida, o trecho depois do corte se perde.';
+  // "Não dá para jogar" serve tanto para lance bem escrito porém ilegal quanto
+  // para anotação que nem lance é — e nos dois casos o que resolve é a mesma
+  // coisa: olhar o arquivo naquele lance.
+  return `Atenção: no lance ${erro.numero} das ${nomeCor(erro.cor)} o arquivo traz ${erro.san}, que não dá para jogar nesta posição. A leitura foi cortada nesse ponto, mas o texto do arquivo continua completo. Se você alterar algo nesta partida, o trecho depois do corte se perde.`;
+}
+
 function abrirPartida(idx, { indices = null } = {}) {
   partidaIdx = idx;
   const partida = arquivoAtual.partidas[idx];
@@ -337,12 +350,16 @@ function abrirPartida(idx, { indices = null } = {}) {
   // partida a partida, é ele que diz onde a pessoa está no arquivo.
   const total = arquivoAtual.partidas.length;
   const onde = total > 1 ? `Partida ${idx + 1} de ${total}.` : 'Partida carregada.';
+  // O aviso de truncamento vai no fim: primeiro a pessoa se situa na partida,
+  // depois ouve o que há de errado com ela.
+  const aviso = avisoDeTruncamento(partida);
+  const fim = aviso ? ` ${aviso}` : '';
   if (!partida.temLances) {
-    anunciar(`${onde} ${nomes}. Partida sem lances registrados.`);
+    anunciar(`${onde} ${nomes}. Partida sem lances registrados.${fim}`);
   } else if (leitura.caminho.length > 1) {
-    anunciar(`${onde} ${nomes}. Retomada no lance ${leitura.caminho.length - 1}.`);
+    anunciar(`${onde} ${nomes}. Retomada no lance ${leitura.caminho.length - 1}.${fim}`);
   } else {
-    anunciar(`${onde} ${nomes}.`);
+    anunciar(`${onde} ${nomes}.${fim}`);
   }
   persistir();
 }
@@ -389,9 +406,13 @@ function render() {
   $('btn-tab-proximo').disabled = semLances;
   $('btn-inicio').disabled = semLances;
   $('btn-final').disabled = semLances;
-  $('btn-sair-variante').disabled = !est.podeSairVariante;
-  $('btn-voltar-principal').disabled = !est.podeVoltarPrincipal;
-  $('btn-variantes').disabled = !est.temVariantesNoLance;
+  // Botões de variante só aparecem quando têm serventia: fora de variante e
+  // em lance sem alternativas, eram três botões mortos ocupando a tela
+  // (decisão da Brenda, 2026-08-29 — antes ficavam desabilitados à vista).
+  // Os atalhos ↑/Shift+↑/↓ seguem respondendo com anúncio em qualquer caso.
+  $('btn-sair-variante').hidden = !est.podeSairVariante;
+  $('btn-voltar-principal').hidden = !est.podeVoltarPrincipal;
+  $('btn-variantes').hidden = !est.temVariantesNoLance;
   $('indicador-posicao').textContent = est.indicador;
 
   // Apagar lance: só quando há um lance atual para apagar
@@ -682,9 +703,20 @@ $('btn-cancelar-bifurcacao').addEventListener('click', () => $('dialogo-bifurcac
 // Partida que nunca chegou a ser aberta continua sendo, letra por letra, o
 // que veio no arquivo: copiar o texto dela é mais fiel (nenhuma reescrita de
 // formatação) e evita montar a árvore de mil partidas só para regravar uma.
+//
+// Partida aberta é regravada a partir da árvore — de propósito: é o que
+// converte notação torta (c6xd5, exNd4) em SAN padrão, e o arquivo que sair
+// daqui abre até em leitor rigoroso. Exceto a truncada: a árvore dela perdeu
+// o trecho depois do lance ilegal, e regravá-la apagaria do arquivo justamente
+// o pedaço que a pessoa precisa consultar para consertar. Ela só é regravada
+// depois que a pessoa altera algo nela — avisada do corte na abertura.
 function textoAtualArquivo() {
   return arquivoAtual.partidas
-    .map((p) => (p.intacta ? p.textoBruto : gerarPgnCompleto(p)).trim())
+    .map((p) => {
+      if (p.intacta) return p.textoBruto.trim();
+      if (p.truncada && !p.alterada) return p.textoBruto.trim();
+      return gerarPgnCompleto(p).trim();
+    })
     .join('\n\n');
 }
 
@@ -745,7 +777,13 @@ function persistir() {
 // Toda mutação passa por aqui (é o `aoAlterar` da Leitura) — e só por aqui,
 // nunca pela abertura de uma partida, que também persiste mas não altera nada.
 function registrarAlteracao() {
-  if (arquivoAtual) arquivoAtual.modificado = true;
+  if (arquivoAtual) {
+    arquivoAtual.modificado = true;
+    // Alterar uma partida truncada é o consentimento para regravá-la: daqui
+    // em diante o arquivo carrega a árvore editada, sem o trecho cortado.
+    const p = arquivoAtual.partidas[partidaIdx];
+    if (p) p.alterada = true;
+  }
   persistir();
 }
 

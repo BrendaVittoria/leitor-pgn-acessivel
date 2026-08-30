@@ -5,7 +5,8 @@
 //
 // Modelo de nó (um por meio-lance):
 //   {
-//     san, move (verboso do chess.js), fen (posição após o lance),
+//     san, sanBruto (texto do arquivo, só quando difere do san),
+//     move (verboso do chess.js), fen (posição após o lance),
 //     numero (lance cheio antes do lance), cor ('w'|'b'),
 //     comment, commentBefore, nags: number[],
 //     children: Nó[]   // children[0] = continuação; children[1..] = variantes
@@ -15,6 +16,7 @@
 
 import { Chess, DEFAULT_POSITION } from '../vendor/chess.js';
 import { SUFIXO_PARA_NAG } from './fala.js';
+import { semPecaCapturada } from './parser.js';
 
 // ---------------- Separação de partidas ----------------
 
@@ -78,7 +80,9 @@ const TOKEN_RE = new RegExp([
   '(\\$\\d+)',                                        // 4 NAG
   '(1-0|0-1|1\\/2-1\\/2|\\*)',                       // 5 resultado
   '(\\d+\\.(?:\\.\\.)?|\\.\\.\\.)',                  // 6 número de lance / reticências
-  '(O-O-O|O-O|0-0-0|0-0|[a-hKQRBN][a-h1-8xX=+#!?KQRBN]*)', // 7 lance (frouxo)
+  // 7 lance (frouxo). As letras de peça entram também em minúscula: sem isso
+  // "exnd4" se parte em "ex" e "d4", e a promoção curta "e8q" perde o "q".
+  '(O-O-O|O-O|0-0-0|0-0|[a-hKQRBN][a-h1-8xX=+#!?KQRBNPkqrbnp]*)',
 ].join('|'), 'g');
 
 function tokenizar(body) {
@@ -114,7 +118,7 @@ function extrairGlifos(bruto) {
 
 function novoNo(parent) {
   return {
-    san: null, move: null, fen: null, numero: null, cor: null,
+    san: null, sanBruto: null, move: null, fen: null, numero: null, cor: null,
     comment: null, commentBefore: null, nags: [],
     children: [], parent,
   };
@@ -145,7 +149,10 @@ function construirArvore(tokens) {
       case 'lance': {
         const { san, nags } = extrairGlifos(tok.v);
         const no = novoNo(parent);
-        no.san = san;
+        no.san = semPecaCapturada(san);
+        // Guardado só para a mensagem de erro: se o lance não passar, quem
+        // ouve precisa do texto que está NO ARQUIVO para achar o ponto lá.
+        if (no.san !== san) no.sanBruto = san;
         no.nags = nags;
         no.commentBefore = comentarioPendente;
         comentarioPendente = null;
@@ -191,6 +198,10 @@ function validarArvore(raiz, fenInicial) {
   raiz.fen = fenInicial;
   let houveErro = false;
   let ultimoLanceValido = 0;
+  // Primeiro lance que não passou, para o app poder dizer ONDE a partida foi
+  // cortada. A busca desce pela continuação antes de olhar as variantes, então
+  // o primeiro erro encontrado é o mais cedo da linha principal.
+  let primeiroErro = null;
 
   function dfs(no, ply) {
     // Itera sobre uma cópia: podar altera no.children.
@@ -213,6 +224,14 @@ function validarArvore(raiz, fenInicial) {
       if (!mv) {
         // Lance ilegal: poda este ramo (trunca a linha aqui).
         houveErro = true;
+        if (!primeiroErro) {
+          const campos = no.fen.split(' ');
+          primeiroErro = {
+            san: filho.sanBruto || filho.san,
+            numero: Number(campos[5]) || Math.floor(ply / 2) + 1,
+            cor: campos[1] === 'b' ? 'b' : 'w',
+          };
+        }
         continue;
       }
       filho.move = mv;
@@ -228,7 +247,7 @@ function validarArvore(raiz, fenInicial) {
     }
   }
   dfs(raiz, 0);
-  return { houveErro, ultimoLanceValido };
+  return { houveErro, ultimoLanceValido, primeiroErro };
 }
 
 // ---------------- API pública ----------------
@@ -258,7 +277,7 @@ export function montarPartida({ tagsText, bodyText }) {
 
   const tokens = tokenizar(bodyText);
   const { raiz, resultado } = construirArvore(tokens);
-  const { houveErro, ultimoLanceValido } = validarArvore(raiz, fenInicial);
+  const { houveErro, ultimoLanceValido, primeiroErro } = validarArvore(raiz, fenInicial);
 
   const resultadoFinal = (tags.Result && tags.Result !== '?')
     ? tags.Result
@@ -272,6 +291,7 @@ export function montarPartida({ tagsText, bodyText }) {
     raiz,
     resultado: resultadoFinal,
     truncada: houveErro,
+    primeiroErro,
     ultimoLanceValido,
     temLances,
   };
@@ -289,7 +309,8 @@ export function montarPartida({ tagsText, bodyText }) {
 // partida, na prática. Quem consome não vê diferença: os campos estão todos
 // lá, com os mesmos nomes de sempre.
 const CAMPOS_DA_ARVORE = [
-  'fenInicial', 'ehSetup', 'raiz', 'truncada', 'ultimoLanceValido', 'temLances',
+  'fenInicial', 'ehSetup', 'raiz', 'truncada', 'primeiroErro',
+  'ultimoLanceValido', 'temLances',
 ];
 
 // Resultado declarado no fim do movetext, sem tokenizar a partida inteira.
