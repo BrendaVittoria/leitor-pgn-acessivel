@@ -153,6 +153,9 @@
            logo abaixo do tabuleiro quando ele está à vista. Repetir o par em
            texto na barra de navegação era duplicar o mesmo comando na tela -->
       <div id="nav-tabuleiro" role="group" aria-label="Lances">
+        <!-- bolinha que indica de quem é a vez na posição mostrada, como nos
+             apps de análise; decorativa para leitores de tela -->
+        <span id="indicador-vez" aria-hidden="true"></span>
         <button type="button" id="btn-tab-anterior" aria-label="Lance anterior" title="Lance anterior">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <polygon points="17,3 17,21 4,12"></polygon>

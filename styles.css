@@ -251,6 +251,7 @@ section { margin-top: 1.25rem; }
 
 .tab-quadro {
   width: min(100%, 88vmin, 30rem);
+  margin-inline: auto; /* centralizado quando sobra largura na coluna */
 }
 
 .tab-grade {
@@ -324,16 +325,37 @@ section { margin-top: 1.25rem; }
   outline-offset: -4px;
   z-index: 1;
 }
-/* Voltar/avançar logo abaixo do tabuleiro, com a mesma largura dele: dois
-   alvos enormes, sem texto, para quem está olhando as peças. */
+/* Voltar/avançar logo abaixo do tabuleiro, como nos apps de análise: a
+   bolinha da vez e as duas setas compactas, lado a lado e centralizadas
+   sob o tabuleiro (mesmo desenho do relógio). */
 #nav-tabuleiro {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
   width: min(100%, 88vmin, 30rem);
-  margin: 0.5rem 0 0.25rem;
+  margin: 0.5rem auto 0.25rem;
 }
+
+/* Bolinha da vez: branca quando jogam as brancas, preta quando jogam as
+   pretas, seguindo a posição mostrada. Decorativa: "Descrever posição" e a
+   leitura dos lances já dizem de quem é a vez. */
+#indicador-vez {
+  flex: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  border: 2px solid var(--texto-suave);
+  background: #fff;
+}
+#indicador-vez.pretas { background: #000; }
+
+/* Largura fixa e pequena: as duas setas cabem lado a lado em qualquer tela
+   e nunca quebram uma para baixo da outra; a altura segue generosa para o
+   toque — o Próximo lance continua sendo o alvo mais usado do app. */
 #nav-tabuleiro button {
-  flex: 1;
+  flex: none;
+  width: 5.5rem;
   margin: 0;
   min-height: 60px;
   padding: 0.5rem;

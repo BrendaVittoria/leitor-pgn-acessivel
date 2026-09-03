@@ -424,6 +424,10 @@ function render() {
     $('indicador-partida').textContent = `Partida ${partidaIdx + 1} de ${arquivoAtual.partidas.length}`;
   }
 
+  // Bolinha da vez: segue a posição mostrada, nos dois modos (o par de
+  // setas fica na tela mesmo com o tabuleiro oculto)
+  $('indicador-vez').classList.toggle('pretas', estadoFen().split(' ')[1] === 'b');
+
   // Tabuleiro
   if (tabuleiro && !$('area-tabuleiro').hidden) {
     tabuleiro.atualizar();

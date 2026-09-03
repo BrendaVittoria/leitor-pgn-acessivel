@@ -13,7 +13,7 @@
 //
 // AO PUBLICAR UMA MUDANÇA: incremente VERSAO abaixo.
 
-const VERSAO = 25;
+const VERSAO = 26;
 const PREFIXO = 'leitor-pgn-';
 const CACHE = `${PREFIXO}v${VERSAO}`;
 const CACHE_COMPARTILHADO = `${PREFIXO}share`;
