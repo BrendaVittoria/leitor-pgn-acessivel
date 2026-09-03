@@ -127,13 +127,6 @@
 
       <!-- 3. Barra de navegação de lances -->
       <div id="barra-navegacao" role="group" aria-label="Navegação de lances">
-        <!-- Com o tabuleiro à vista, esta linha some: quem enxerga usa as
-             setas grandes coladas no tabuleiro, e ter os dois pares na mesma
-             tela é só duplicar o mesmo comando em dois lugares -->
-        <div class="acoes-linha" id="linha-lances-texto">
-          <button type="button" id="btn-anterior">Lance anterior</button>
-          <button type="button" id="btn-proximo" class="botao-principal">Próximo lance</button>
-        </div>
         <div class="acoes-linha">
           <button type="button" id="btn-inicio">Início da partida</button>
           <button type="button" id="btn-final">Final da partida</button>
@@ -156,9 +149,10 @@
                autocorrect="off" spellcheck="false" enterkeyhint="send">
       </div>
       <div id="area-tabuleiro" hidden></div>
-      <!-- Voltar e avançar colados no tabuleiro: com ele à vista, ninguém
-           precisa subir até a barra de navegação para andar nos lances -->
-      <div id="nav-tabuleiro" role="group" aria-label="Lances, junto ao tabuleiro" hidden>
+      <!-- O único par de Voltar e Avançar do app: setas grandes sempre à mão,
+           logo abaixo do tabuleiro quando ele está à vista. Repetir o par em
+           texto na barra de navegação era duplicar o mesmo comando na tela -->
+      <div id="nav-tabuleiro" role="group" aria-label="Lances">
         <button type="button" id="btn-tab-anterior" aria-label="Lance anterior" title="Lance anterior">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <polygon points="17,3 17,21 4,12"></polygon>

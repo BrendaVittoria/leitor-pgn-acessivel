@@ -400,8 +400,6 @@ function render() {
   // partida."), nunca silêncio nem botão morto (seção 3.1 da especificação).
   // Só a posição avulsa/partida sem lances os desabilita.
   const semLances = partida.raiz.children.length === 0;
-  $('btn-anterior').disabled = semLances;
-  $('btn-proximo').disabled = semLances;
   $('btn-tab-anterior').disabled = semLances;
   $('btn-tab-proximo').disabled = semLances;
   $('btn-inicio').disabled = semLances;
@@ -601,19 +599,14 @@ function configurarTabuleiro() {
   aplicarPrefTabuleiro();
 }
 
-// As duas formas de ver a partida não precisam ser iguais, e não são: com o
-// tabuleiro à vista, andar nos lances é o gesto do momento e as setas ficam
-// coladas nele; sem tabuleiro, é "Descrever posição" que vira o gesto do
-// momento — é a única forma de saber onde estão as peças —, então ele sai do
-// painel e fica fixo na tela. O que nunca acontece é o mesmo comando aparecer
-// duas vezes na mesma tela.
+// As duas formas de ver a partida não precisam ser iguais, e não são: sem
+// tabuleiro, "Descrever posição" vira o gesto do momento — é a única forma
+// de saber onde estão as peças. As setas de Voltar e Avançar são as mesmas
+// nos dois modos; o que nunca acontece é o mesmo comando aparecer duas
+// vezes na mesma tela.
 function aplicarPrefTabuleiro() {
   const mostrar = prefs.tabuleiro;
   $('area-tabuleiro').hidden = !mostrar;
-  // Os botões de seta só existem enquanto o tabuleiro está à vista; sem ele
-  // seriam um par de alvos duplicados no caminho do leitor de tela.
-  $('nav-tabuleiro').hidden = !mostrar;
-  $('linha-lances-texto').hidden = mostrar;
   // "Descrever posição" troca de lugar em vez de existir nos dois: fixo na
   // tela no modo sem tabuleiro, dentro do painel de ações no modo com.
   $('btn-descrever-fixo').hidden = mostrar;
@@ -1798,8 +1791,6 @@ function ligarEventos() {
   $('btn-partida-proxima').addEventListener('click', () => irParaPartidaVizinha(1));
 
   // Navegação de lances
-  $('btn-anterior').addEventListener('click', () => leitura.anterior());
-  $('btn-proximo').addEventListener('click', () => { acordarAudio(); leitura.proximo(); });
   $('btn-tab-anterior').addEventListener('click', () => leitura.anterior());
   $('btn-tab-proximo').addEventListener('click', () => { acordarAudio(); leitura.proximo(); });
   $('btn-inicio').addEventListener('click', () => leitura.inicio());

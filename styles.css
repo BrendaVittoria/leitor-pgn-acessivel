@@ -227,9 +227,6 @@ section { margin-top: 1.25rem; }
   background: var(--fundo-painel);
 }
 #barra-navegacao .acoes-linha { margin-bottom: 0.3rem; }
-/* O display:flex de .acoes-linha ganharia do display:none do atributo hidden:
-   sem isto, a linha de lances continuaria na tela no modo com tabuleiro. */
-#barra-navegacao .acoes-linha[hidden] { display: none; }
 
 #nav-partidas {
   border: 1px solid var(--borda);
