@@ -48,6 +48,22 @@ export class TabuleiroAcessivel {
         botao.className = `tab-casa ${(c + linha) % 2 === 0 ? 'clara' : 'escura'}`;
         botao.dataset.casa = casa;
         botao.tabIndex = -1;
+        // Coordenadas visuais dentro das casas da borda (números na coluna a,
+        // letras na fileira 1), para não roubar espaço do tabuleiro. São
+        // apenas decorativas: quem usa leitor de tela já ouve o nome da casa
+        // no rótulo de cada botão (aria-label ignora este conteúdo).
+        if (c === 0) {
+          const coord = document.createElement('span');
+          coord.className = 'tab-coord tab-coord-linha';
+          coord.textContent = String(linha);
+          botao.appendChild(coord);
+        }
+        if (linha === 1) {
+          const coord = document.createElement('span');
+          coord.className = 'tab-coord tab-coord-coluna';
+          coord.textContent = COLUNAS[c];
+          botao.appendChild(coord);
+        }
         botao.addEventListener('click', () => this._aoAtivar(casa));
         this.botoes.set(casa, botao);
         grade.appendChild(botao);
@@ -56,30 +72,9 @@ export class TabuleiroAcessivel {
     this.botoes.get('e2').tabIndex = 0;
     grade.addEventListener('keydown', (e) => this._aoTecla(e));
 
-    // Coordenadas visuais (letras embaixo, números à esquerda). São apenas
-    // decorativas: quem usa leitor de tela já ouve o nome da casa no rótulo
-    // de cada botão, então repeti-las aqui só atrapalharia a leitura.
-    const fileiras = document.createElement('div');
-    fileiras.className = 'tab-fileiras';
-    fileiras.setAttribute('aria-hidden', 'true');
-    for (let linha = 8; linha >= 1; linha--) {
-      const rotulo = document.createElement('span');
-      rotulo.textContent = String(linha);
-      fileiras.appendChild(rotulo);
-    }
-
-    const colunas = document.createElement('div');
-    colunas.className = 'tab-colunas';
-    colunas.setAttribute('aria-hidden', 'true');
-    for (const letra of COLUNAS) {
-      const rotulo = document.createElement('span');
-      rotulo.textContent = letra;
-      colunas.appendChild(rotulo);
-    }
-
     const quadro = document.createElement('div');
     quadro.className = 'tab-quadro';
-    quadro.append(fileiras, grade, colunas);
+    quadro.appendChild(grade);
 
     const legenda = document.createElement('p');
     legenda.className = 'tab-coordenadas';
@@ -202,7 +197,8 @@ export class TabuleiroAcessivel {
       const chavePeca = peca ? `${peca.color}${peca.type}` : '';
       if (botao.dataset.peca !== chavePeca) {
         botao.dataset.peca = chavePeca;
-        botao.textContent = '';
+        // só a imagem da peça sai: a coordenada da borda fica no botão
+        botao.querySelector('img')?.remove();
         if (peca) {
           const imagem = document.createElement('img');
           imagem.src = `icons/pecas/${chavePeca}.svg`;

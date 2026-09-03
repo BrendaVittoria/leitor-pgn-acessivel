@@ -13,9 +13,6 @@
   --foco: #6ecbff;
   --lance-de: #ffd75e;
   --variante: #ff9d5c;
-  /* largura da faixa de números à esquerda do tabuleiro — o que estiver
-     alinhado com o tabuleiro (Voltar/Avançar) desconta a mesma medida */
-  --faixa-coord: 1.25rem;
 }
 
 * { box-sizing: border-box; }
@@ -255,53 +252,32 @@ section { margin-top: 1.25rem; }
 
 #area-tabuleiro { margin-top: 0.5rem; }
 
-/* Quadro = faixa de números + tabuleiro + faixa de letras. É ele que carrega
-   a largura; a grade só ocupa a célula que sobra. */
 .tab-quadro {
-  display: grid;
-  grid-template-columns: var(--faixa-coord) 1fr; /* números | tabuleiro */
-  grid-template-rows: auto auto;                 /* tabuleiro / letras */
   width: min(100%, 88vmin, 30rem);
 }
 
 .tab-grade {
-  grid-column: 2;
-  grid-row: 1;
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   border: 3px solid var(--borda);
   box-sizing: border-box;
 }
 
-/* Coordenadas decorativas: as faixas repetem a borda do tabuleiro em
-   transparente para que cada rótulo caia exatamente na frente da sua casa. */
-.tab-fileiras, .tab-colunas {
-  display: grid;
-  border: 3px solid transparent;
-  box-sizing: border-box;
-  color: var(--texto-suave);
-  font-size: 0.8rem;
+/* Coordenadas decorativas dentro das casas da borda: número no canto de
+   cima da coluna a, letra no canto de baixo da fileira 1. Cada uma usa a
+   cor da casa oposta, garantindo contraste em qualquer tema. */
+.tab-coord {
+  position: absolute;
+  font-size: 0.75rem;
+  font-weight: 600;
   line-height: 1;
   user-select: none;
+  pointer-events: none;
 }
-.tab-fileiras {
-  grid-column: 1;
-  grid-row: 1;
-  grid-template-rows: repeat(8, 1fr);
-  padding-right: 0.3rem;
-}
-.tab-fileiras span {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-.tab-colunas {
-  grid-column: 2;
-  grid-row: 2;
-  grid-template-columns: repeat(8, 1fr);
-  padding-top: 0.25rem;
-}
-.tab-colunas span { text-align: center; }
+.tab-coord-linha { top: 5%; left: 6%; }
+.tab-coord-coluna { bottom: 5%; right: 6%; }
+.tab-casa.clara .tab-coord { color: var(--casa-escura); }
+.tab-casa.escura .tab-coord { color: var(--casa-clara); }
 
 .tab-casa {
   position: relative;
@@ -357,9 +333,6 @@ section { margin-top: 1.25rem; }
   display: flex;
   gap: 0.5rem;
   width: min(100%, 88vmin, 30rem);
-  /* mesmo recuo da faixa de números, para os botões nascerem na borda
-     esquerda do tabuleiro e não à esquerda das coordenadas */
-  padding-left: var(--faixa-coord);
   margin: 0.5rem 0 0.25rem;
 }
 #nav-tabuleiro button {
@@ -494,7 +467,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
   body { font-size: 1.05rem; }
   main { padding: 0 0.6rem 2rem; }
   .tab-quadro { width: min(100%, 92vmin); }
-  .tab-fileiras, .tab-colunas { font-size: 0.7rem; }
+  .tab-coord { font-size: 0.65rem; }
   #nav-tabuleiro { width: min(100%, 92vmin); }
   .botao-principal { font-size: 1.2rem; }
 }
