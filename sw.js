@@ -11,11 +11,23 @@
 // O cache do compartilhamento é separado e nunca é tocado por essa troca: ele
 // pode conter um PGN recém-recebido que ainda não chegou à página.
 //
+// A troca do snapshot só vale a partir da PRÓXIMA abertura do app. Uma página
+// que já está carregando nunca vê o cache mudar debaixo dela: o snapshot novo
+// é baixado para um cache de espera e só é aplicado no começo de uma
+// navegação, antes de qualquer arquivo ser servido. Trocar no meio de uma
+// carga (como fazia antes, com skipWaiting/claim e gravação direta no cache
+// em uso) deixava index.html de uma versão com módulos de outra — o app
+// "bugava depois da atualização" até a pessoa recarregar de novo.
+//
 // AO PUBLICAR UMA MUDANÇA: incremente VERSAO abaixo.
 
-const VERSAO = 26;
+const VERSAO = 27;
 const PREFIXO = 'leitor-pgn-';
 const CACHE = `${PREFIXO}v${VERSAO}`;
+// cache de espera: recebe o snapshot novo sem mexer no que está servindo
+const CACHE_ESPERA = `${PREFIXO}espera-v${VERSAO}`;
+// marca gravada por último: só um cache de espera com ela está completo
+const MARCA_COMPLETO = './snapshot-completo';
 const CACHE_COMPARTILHADO = `${PREFIXO}share`;
 const LIMITE_COMPARTILHADO = 5 * 1024 * 1024;
 
@@ -71,32 +83,62 @@ async function gravarSnapshot(cache) {
 
 // Confere se o index.html publicado mudou em relação ao do cache. É o gatilho
 // reserva: se uma publicação esquecer de incrementar VERSAO, o app se conserta
-// sozinho na próxima abertura com internet.
-let jaConferiu = false;
+// sozinho na próxima abertura com internet. O snapshot novo vai para o cache
+// de espera; a página aberta continua sendo servida pelo conjunto atual.
+// Roda a cada abertura: custa um GET pequeno do index.html; o download do
+// conjunto inteiro só acontece quando ele mudou de verdade.
 async function conferirAtualizacao() {
-  if (jaConferiu) return;
-  jaConferiu = true;
   try {
     const cache = await caches.open(CACHE);
     const emCache = await cache.match('./index.html');
     const publicado = await daRede('./index.html');
     if (!publicado || !publicado.ok) return;
     if (emCache && (await emCache.text()) === (await publicado.clone().text())) return;
-    await gravarSnapshot(cache);
+    const espera = await caches.open(CACHE_ESPERA);
+    await gravarSnapshot(espera);
+    await espera.put(MARCA_COMPLETO, new Response('ok'));
   } catch {
-    // sem internet ou download incompleto: segue com o snapshot atual
+    // sem internet ou download incompleto: segue com o snapshot atual e
+    // descarta o que chegou pela metade
+    await caches.delete(CACHE_ESPERA).catch(() => {});
+  }
+}
+
+// Chamado no começo de cada navegação, antes de servir qualquer arquivo: se
+// há um snapshot completo esperando, ele vira o conjunto em uso agora — e a
+// página que vai abrir já nasce inteira na versão nova.
+async function aplicarSnapshotEmEspera() {
+  try {
+    if (!(await caches.has(CACHE_ESPERA))) return;
+    const espera = await caches.open(CACHE_ESPERA);
+    if (!(await espera.match(MARCA_COMPLETO))) return; // ainda baixando
+    const cache = await caches.open(CACHE);
+    const chaves = await espera.keys();
+    await Promise.all(chaves.map(async (requisicao) => {
+      if (requisicao.url.endsWith(MARCA_COMPLETO.slice(1))) return;
+      const resposta = await espera.match(requisicao);
+      if (resposta) await cache.put(requisicao, resposta);
+    }));
+    await caches.delete(CACHE_ESPERA);
+  } catch {
+    // qualquer falha aqui deixa o conjunto atual valendo; tenta de novo na
+    // próxima abertura
   }
 }
 
 self.addEventListener('install', (evento) => {
-  evento.waitUntil(
-    caches.open(CACHE)
-      .then(gravarSnapshot)
-      .then(() => {
-        jaConferiu = true; // acabou de baixar tudo; não precisa conferir de novo
-        return self.skipWaiting();
-      }),
-  );
+  // Sem skipWaiting: este service worker só assume quando todas as abas do
+  // app fecharem, e a página aberta segue inteira na versão antiga.
+  evento.waitUntil((async () => {
+    // Cache desta VERSAO ainda não existe: é novo, ninguém é servido por ele,
+    // pode gravar direto. Se já existe (sw.js publicado sem incrementar
+    // VERSAO), gravar nele misturaria versões na página aberta — vai para o
+    // cache de espera e entra na próxima abertura, como qualquer atualização.
+    const jaEmUso = await caches.has(CACHE);
+    const destino = await caches.open(jaEmUso ? CACHE_ESPERA : CACHE);
+    await gravarSnapshot(destino);
+    if (jaEmUso) await destino.put(MARCA_COMPLETO, new Response('ok'));
+  })());
 });
 
 self.addEventListener('activate', (evento) => {
@@ -110,12 +152,15 @@ self.addEventListener('activate', (evento) => {
         // Apagar tudo que não fosse meu deixava o relógio sem cópia offline a
         // cada publicação — e ele parava de abrir no primeiro momento sem
         // internet boa.
+        // O cache de espera desta VERSAO também fica: pode ser o snapshot que
+        // o próprio install acabou de baixar para entrar na próxima abertura.
         chaves
           .filter((chave) => chave.startsWith(PREFIXO)
-            && chave !== CACHE && chave !== CACHE_COMPARTILHADO)
+            && chave !== CACHE && chave !== CACHE_ESPERA && chave !== CACHE_COMPARTILHADO)
           .map((chave) => caches.delete(chave)),
-      ))
-      .then(() => self.clients.claim()),
+      )),
+    // sem clients.claim(): as páginas já abertas ficam com o service worker
+    // que as carregou; as próximas navegações já nascem com este
   );
 });
 
@@ -141,22 +186,29 @@ self.addEventListener('fetch', (evento) => {
   const navegacao = requisicao.mode === 'navigate';
   const chave = navegacao ? './index.html' : requisicao;
 
-  evento.respondWith(
+  // a troca de snapshot só acontece aqui, antes do primeiro arquivo da
+  // página sair: assim ela nunca mistura versões
+  const troca = navegacao ? aplicarSnapshotEmEspera() : Promise.resolve();
+
+  evento.respondWith((async () => {
+    await troca;
     // busca dentro do MEU cache: caches.match() varre todos os caches do
     // endereço, inclusive os do relógio e versões antigas minhas
-    caches.open(CACHE).then((cache) => cache.match(chave)).then(async (emCache) => {
-      if (emCache) return emCache;
-      // fora do snapshot (arquivo novo, recurso externo ao shell): tenta a rede
-      try {
-        return await fetch(requisicao);
-      } catch {
-        return Response.error();
-      }
-    }),
-  );
+    const cache = await caches.open(CACHE);
+    const emCache = await cache.match(chave);
+    if (emCache) return emCache;
+    // fora do snapshot (arquivo novo, recurso externo ao shell): tenta a rede
+    try {
+      return await fetch(requisicao);
+    } catch {
+      return Response.error();
+    }
+  })());
 
-  // a conferência roda em segundo plano, sem atrasar a resposta ao usuário
-  if (navegacao) evento.waitUntil(conferirAtualizacao());
+  // a conferência roda em segundo plano, sem atrasar a resposta ao usuário —
+  // mas só depois da troca, senão compara o index.html antigo com o publicado
+  // e baixa de novo um snapshot que acabou de ser aplicado
+  if (navegacao) evento.waitUntil(troca.then(conferirAtualizacao));
 });
 
 // Recebe o POST do compartilhamento, extrai o PGN (arquivo ou texto puro),

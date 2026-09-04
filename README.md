@@ -100,6 +100,13 @@ snapshot novo nos aparelhos já instalados. Se esquecer, há uma rede de
 segurança — o service worker compara o `index.html` publicado com o do cache —,
 mas ela não cobre uma publicação que mexa só nos `.js`.
 
+Nos dois casos a versão nova só entra na **abertura seguinte** do app: o
+snapshot é baixado para um cache de espera e aplicado no começo da próxima
+navegação, antes de qualquer arquivo ser servido. Uma página que já está
+carregando nunca vê o cache mudar debaixo dela — é isso que evita o
+`index.html` de uma versão com módulos de outra ("o app bugou depois da
+atualização"). Quem quiser a versão nova na hora: fecha o app e abre de novo.
+
 **Nunca apague "todos os caches menos o meu".** Este app e o
 [relógio de xadrez](https://github.com/BrendaVittoria/relogio-xadrez-acessivel)
 moram no mesmo endereço (`brendavittoria.github.io`, pastas diferentes), e o
