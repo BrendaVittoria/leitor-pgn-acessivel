@@ -54,8 +54,10 @@
           <button type="button" id="btn-apagar-todos" hidden>Apagar todos</button>
           <button type="button" id="btn-espaco">Espaço do aparelho</button>
         </div>
+        <!-- aria-label repete o texto visível: o TalkBack no Chrome lê só
+             "marcado/desmarcado" quando o nome vem do label (visto no relógio) -->
         <label for="chk-guardar" class="linha-checkbox">
-          <input type="checkbox" id="chk-guardar" checked>
+          <input type="checkbox" id="chk-guardar" checked aria-label="Manter neste app os PGNs abertos">
           <span>Manter neste app os PGNs abertos</span>
         </label>
         <p class="ajuda">Desligado, nada de novo é mantido: a leitura funciona
@@ -195,11 +197,11 @@
           <button type="button" id="btn-outro-pgn">Abrir outro PGN</button>
         </div>
         <label for="chk-perguntar" class="linha-checkbox">
-          <input type="checkbox" id="chk-perguntar" checked>
+          <input type="checkbox" id="chk-perguntar" checked aria-label="Perguntar nas bifurcações">
           <span>Perguntar nas bifurcações</span>
         </label>
         <label for="chk-som" class="linha-checkbox">
-          <input type="checkbox" id="chk-som" checked>
+          <input type="checkbox" id="chk-som" checked aria-label="Som dos lances">
           <span>Som dos lances</span>
         </label>
 

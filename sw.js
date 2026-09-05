@@ -21,7 +21,7 @@
 //
 // AO PUBLICAR UMA MUDANÇA: incremente VERSAO abaixo.
 
-const VERSAO = 27;
+const VERSAO = 28;
 const PREFIXO = 'leitor-pgn-';
 const CACHE = `${PREFIXO}v${VERSAO}`;
 // cache de espera: recebe o snapshot novo sem mexer no que está servindo
